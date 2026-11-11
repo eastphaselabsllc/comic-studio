@@ -37,10 +37,10 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Key set by the owner in Settings, stored under `localStorage.cs_k` on this origin. No real key was sought or used during development.
 - Base: `https://api.venice.ai/api/v1`; authenticated requests use `Authorization: Bearer <key>`.
 - “Load available models”: `GET /models?type=all`, excludes `model_spec.deprecation`, text and image models only. Uncensored models (`model_spec.uncensored: true`) are sorted first, with stable order otherwise. Image models pin `chroma`, then `lustify-sdxl`, then other uncensored models, then the rest. The text picker always offers `default_vision`, `most_uncensored`, and `venice-uncensored-1-2` at the top. Discovery is explicit, not startup/background activity.
-- Text: `POST /chat/completions`, non-streaming. Default `default_vision` trait; if discovered, resolves to the model advertising that trait. Selected character profiles + current script are context; provider system safety stays enabled. Text is checked before and after the API call.
+- Text: `POST /chat/completions`, streaming SSE. Default `most_uncensored` trait (currently `venice-uncensored-1-2`). `default_vision` is still offered, but thinking is turned off so a long reply is not silent. Selected character profiles + current script are context; provider system safety stays enabled. Text is checked before and after the API call. A dropped connection says what happened and offers Try again.
 - Images: `POST /image/generate`, default `chroma`, PNG/base64 response, `cfg_scale: 7`, 28 steps, 832×1216, **`safe_mode: false`**.
 - If Chroma returns HTTP 404 (missing model), offers one separately confirmed request using `lustify-sdxl`. It does not auto-retry a timeout, network failure, policy error, or uncertain generation.
-- Reference support is capability-based: only send `style_references` if the selected model advertises `model_spec.supportsStyleReferences`; respect its advertised count. Load models in Settings to discover this. Chroma/default models may provide description-only continuity. This is not a guarantee of identity preservation.
+- Reference support is capability-based: only send `style_references` if the selected model advertises `model_spec.supportsStyleReferences`; respect its advertised count. Load models in Settings to discover this. Chroma and Lustify do not accept them. On models that do, a style reference is aesthetic guidance, not face lock. Every panel prompt starts with a fixed visual identity block (face, hair, body, outfit, tattoos) and reuses a stable seed for that cast. The scene is shortened to the model’s prompt limit before any identity text is cut.
 - No undocumented `face_b64` field is sent to Venice.
 - Every live text/image generation asks before making a potentially paid request; declining prevents it.
 
@@ -103,6 +103,11 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.3
+
+- AI polish and page planning stream from Venice and disable hidden reasoning, so iPhone Safari is not left waiting on a silent response. The default text model is `most_uncensored`. Failures explain what happened and offer Try again. Form errors show inside the open modal.
+- Panel prompts lead with each character’s visual identity, keep that text when the scene is shortened, and reuse a seed for the same cast. Generate comic stays in script order and assigns the characters named in each beat. Service worker cache is `comic-studio-v1.3.0`.
 
 ### v1.2
 
