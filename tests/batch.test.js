@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULT_PANEL_COUNT, clampPanelCount, splitScriptIntoBeats, buildEpisodePages, normalizePlan, panelJob, panelPrompt, characterSeed, PLAN_MAX_PANELS} from '../core.js';
+import {DEFAULT_PANEL_COUNT, clampPanelCount, splitScriptIntoBeats, buildEpisodePages, normalizePlan, panelJob, panelPrompt, visualScene, characterSeed, PLAN_MAX_PANELS} from '../core.js';
 import {runPanelBatch} from '../batch.js';
 
 const script=Array.from({length:20},(_,i)=>`Scene ${i+1}. Mira and Rowan, both fictional adults, keep walking through the orbital garden.`).join('\n\n');
@@ -54,6 +54,9 @@ test('quick plan stays capped at 36 while a full comic can use a short AI plan a
   const panels=pages.flatMap(p=>p.panels);
   assert.equal(panels.length, 45);
   assert.match(panels[0].prompt, /Amber light/);
+  assert.equal(panels[0].dialogue, '');
+  assert.equal(panels[0].caption, '');
+  assert.equal(panels[0].bubbles.length, 0);
   assert.equal(panels[0].camera, 'Low angle');
   assert.deepEqual(panels[0].cast, ['c1']);
   assert.match(panels[10].prompt, /garden|Mira|Rowan|Scene|fictional/);
@@ -126,6 +129,14 @@ test('image prompts lead with identity and keep it when the scene is shortened',
   assert.ok(job.seed>=1&&job.seed<=999999999);
   assert.ok(job.prompt.indexOf('Rowan')<job.prompt.indexOf('Mira'));
   assert.ok(job.prompt.startsWith('Exact character identity'));
+  const spoken=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:'Mira Vale: "Stay with me tonight." She turns toward the window.',characters:[mira]});
+  assert.doesNotMatch(spoken, /Stay with me/);
+  assert.match(spoken, /turns toward the window/);
+  assert.match(spoken, /No speech bubbles/);
+  assert.equal(visualScene('Mira: Stay with me.\nShe waits by the glass.'), 'She waits by the glass.');
+  const pagesFromSpeech=buildEpisodePages({script:'Mira: Stay with me tonight.\n\nShe turns toward the window.',cast:['a'],count:2,characters:[mira]});
+  assert.ok(pagesFromSpeech.flatMap(p=>p.panels).every(p=>p.dialogue===''&&p.caption===''&&p.bubbles.length===0));
+  assert.doesNotMatch(pagesFromSpeech.flatMap(p=>p.panels).map(p=>p.prompt).join('\n'), /Stay with me/);
 });
 
 test('panel jobs reuse only the selected character references', ()=>{
@@ -139,7 +150,8 @@ test('panel jobs reuse only the selected character references', ()=>{
   assert.match(job.prompt, /Mira/);
   assert.match(job.prompt, /No Ref/);
   assert.doesNotMatch(job.prompt, /Rowan/);
-  assert.match(job.prompt, /no printed text, captions, or speech bubbles/);
+  assert.match(job.prompt, /No speech bubbles, word balloons, captions, subtitles, letters, or written words/);
+  assert.doesNotMatch(job.prompt, /draw a speech|one line per bubble/i);
   assert.match(job.prompt, /fictional adults, age 18\+/);
 });
 

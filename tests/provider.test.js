@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream} from '../provider.js';
+import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, IMAGE_NEGATIVE} from '../provider.js';
 import {panelPrompt} from '../core.js';
 
 const memory=new Map();
@@ -19,6 +19,11 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   assert.equal(defaults.textModel, 'most_uncensored');
   assert.match(planInstruction({}), /maximum 36 panels/);
   assert.match(planInstruction({targetPanels:45}), /exactly 45/);
+  assert.match(planInstruction({}), /dialogue and caption must be an empty string/);
+  assert.doesNotMatch(planInstruction({targetPanels:45}), /one line per bubble/);
+  assert.match(IMAGE_NEGATIVE, /speech bubble/);
+  assert.match(IMAGE_NEGATIVE, /letters/);
+  assert.doesNotMatch(IMAGE_NEGATIVE, /unreadable text/);
   let calls=0;
   globalThis.fetch=()=>{calls++;throw Error('network should not be called');};
   const provider=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});

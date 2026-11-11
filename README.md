@@ -23,8 +23,8 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Characters: appearance description, adult age and fictional-attestation checks, personality, backstory, body/hair/outfit/tattoo presets, image upload, turnaround-sheet upload and generation.
 - Series > episodes, per-series art style, editable scripts and selected cast, AI polish preview/apply/undo.
 - AI-planned pages and editable panel cards: page layout, camera angle, scene prompt, cast, dialogue, captions, lettering position, add/remove panels and pages, regenerate a single panel.
-- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order through the existing image pipeline, reusing saved character references. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art.
-- Speech bubbles and captions remain overlays, never baked into the generated art. The speech-bubble editor places preset bubbles (round speech, thought, shout, whisper, caption) on a finished panel: drag, resize, move or flip the tail, type, change font size, and delete. They save with the panel and draw on top in the reader and in a page download.
+- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order through the existing image pipeline, reusing saved character references. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art. New panels are not given speech bubbles, captions, or dialogue lettering.
+- Speech bubbles are added only by hand. Pick a preset, drag it onto the panel, and type. They stay overlays on top of the art in the reader and in a page download. Image requests also tell the model not to draw balloons or words, and quoted speech is removed from the scene text sent to the image model.
 - Page reader with previous/next, horizontal swipe, and keyboard navigation.
 - IndexedDB image blobs and library metadata, debounced autosaving, JSON backup/export and validated atomic restore. Backups contain all referenced art, not connection settings or keys.
 - Raster-image validation/resize, text escaping, no external scripts or analytics, CSP, no network API caching.
@@ -78,7 +78,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 
 ## Speech bubbles
 
-Open a panel that already has art and tap **Speech bubbles** (or **Bubbles** in the reader). Pick a preset, then:
+Open a panel that already has art and tap **Speech bubbles** (or **Bubbles** in the reader). Nothing is placed for you. Pick a preset, then:
 
 - Drag the bubble, or the ✥ handle, to place it. Drag the corner to resize. Drag the teal dot to aim the tail.
 - Tap the words to type. Font size is the slider. **Flip tail** mirrors the art and the tail. **Delete** removes the selected bubble.
@@ -103,6 +103,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.4
+
+- Generated panels no longer get automatic speech bubbles or caption overlays from script dialogue. Bubbles appear only after a preset is placed and the text is typed. Service worker cache is `comic-studio-v1.4.0`.
 
 ### v1.3
 

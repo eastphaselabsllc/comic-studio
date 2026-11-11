@@ -67,13 +67,11 @@ test('bubbles can be moved, resized, flipped, retyped, and deleted by data', ()=
   assert.match(tailMarkup(createBubble('thought-cloud')), /<circle/);
 });
 
-test('dialogue seeds editable bubbles without replacing ones already saved', ()=>{
+test('dialogue does not create bubbles; only saved bubbles are kept', ()=>{
   const seeded=seedBubbles({dialogue:'Mira: Hello there\nRowan: Look out!',caption:'Later that night',bubbles:[]});
-  assert.equal(seeded[0].preset, 'round-speech');
-  assert.equal(seeded[0].text, 'Hello there');
-  assert.equal(seeded[1].preset, 'shout-burst');
-  assert.equal(seeded.at(-1).preset, 'caption-box');
-  assert.equal(seeded.at(-1).text, 'Later that night');
+  assert.deepEqual(seeded, []);
+  const fresh=createBubble('round-speech');
+  assert.equal(fresh.text, '');
   const kept=seedBubbles({dialogue:'Mira: Hi',bubbles:[createBubble('whisper-dashed',{text:'psst',id:'bubble-1'})]});
   assert.equal(kept.length, 1);
   assert.equal(kept[0].preset, 'whisper-dashed');

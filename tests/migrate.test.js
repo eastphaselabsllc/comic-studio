@@ -30,8 +30,8 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   });
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.3\.0/);
-  assert.doesNotMatch(sw, /comic-studio-v1\.2\.0/);
+  assert.match(sw, /comic-studio-v1\.4\.0/);
+  assert.doesNotMatch(sw, /comic-studio-v1\.3\.0/);
   for(const file of ['batch.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
     assert.match(sw, new RegExp(file.replace('/','\\/').replace('.','\\.')));
     assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), true);
