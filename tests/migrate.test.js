@@ -30,9 +30,9 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   });
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.5\.0/);
-  assert.doesNotMatch(sw, /comic-studio-v1\.4\.0/);
-  for(const file of ['batch.js','jobs.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
+  assert.match(sw, /comic-studio-v1\.6\.0/);
+  assert.doesNotMatch(sw, /comic-studio-v1\.5\.0/);
+  for(const file of ['batch.js','jobs.js','face.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
     assert.match(sw, new RegExp(file.replace('/','\\/').replace('.','\\.')));
     assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), true);
   }
@@ -59,6 +59,13 @@ test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles'
   assert.equal(panels[0].imageId, 'img1');
   assert.equal(panels[0].bubbles[0].text, 'Stay with me');
   assert.equal(panels[0].bubbles[0].preset, 'round-speech');
+  const labeled=structuredClone(saved);
+  labeled.series[0].episodes[0].pages[0].panels[0].engine='local';
+  labeled.series[0].episodes[0].pages[0].panels[1].engine='not-an-engine';
+  const round=validateLibrary(labeled);
+  const roundPanels=round.series[0].episodes.flatMap(e=>e.pages.flatMap(p=>p.panels));
+  assert.equal(roundPanels[0].engine, 'local');
+  assert.equal(roundPanels[1].engine, undefined);
   const legacy=validateLibrary(v1);
   assert.equal(legacy.schemaVersion, 2);
   assert.equal(legacy.series[0].episodes[0].pages.flatMap(p=>p.panels).length, 45);

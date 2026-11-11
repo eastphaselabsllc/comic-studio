@@ -1,11 +1,25 @@
 import http from 'node:http';
 
-function readBody(req){
+function readBody(req,maxBody){
   return new Promise((resolve,reject)=>{
     const chunks=[];
-    req.on('data',chunk=>chunks.push(chunk));
-    req.on('end',()=>resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error',reject);
+    let size=0;
+    let failed=false;
+    req.on('data',chunk=>{
+      if(failed)return;
+      size+=chunk.length;
+      if(maxBody&&size>maxBody){
+        failed=true;
+        const err=Error('Body larger than limit');
+        err.status=413;
+        reject(err);
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end',()=>{if(!failed)resolve(Buffer.concat(chunks));});
+    req.on('error',err=>{if(!failed)reject(err);});
   });
 }
 
@@ -38,10 +52,11 @@ function publicJob(job){
   };
 }
 
-export function startMockGateway(token='test-local-token'){
+export function startMockGateway(token='test-local-token',options={}){
   const jobs=new Map();
   const calls=[];
   let seq=0;
+  const control={maxBody:options.maxBody||0,rejectAfter:options.rejectAfter??null};
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://127.0.0.1');
     const send=(code,obj)=>{
@@ -56,15 +71,33 @@ export function startMockGateway(token='test-local-token'){
       res.end(body);
     };
     if(req.method==='OPTIONS'){send(204,null);return;}
-    const entry={method:req.method,path:url.pathname,auth:req.headers.authorization||''};
+    const entry={method:req.method,path:url.pathname,auth:req.headers.authorization||'',bytes:0};
+    const declared=Number(req.headers['content-length']||0);
+    if(control.maxBody&&declared>control.maxBody){
+      calls.push(entry);
+      send(413,{detail:'Body larger than limit'});
+      req.resume();
+      return;
+    }
     if(req.method==='POST'||req.method==='DELETE'){
-      try{entry.body=JSON.parse(await readBody(req)||'null');}
+      let raw;
+      try{raw=await readBody(req,control.maxBody);}
+      catch(err){
+        entry.bytes=declared||0;
+        calls.push(entry);
+        if(err?.status===413){send(413,{detail:'Body larger than limit'});return;}
+        send(400,{detail:'Body is not a JSON object'});
+        return;
+      }
+      entry.bytes=raw.length;
+      try{entry.body=JSON.parse(raw.toString('utf8')||'null');}
       catch{entry.body=null;}
     }
     calls.push(entry);
     if(req.method==='GET'&&url.pathname==='/health'){send(200,{ok:true});return;}
     if((req.headers.authorization||'')!=='Bearer '+token){send(401,{detail:'Unauthorized'});return;}
     if(req.method==='POST'&&url.pathname==='/jobs'){
+      if(Number.isInteger(control.rejectAfter)&&seq>=control.rejectAfter){send(500,{detail:'Gateway broke'});return;}
       const data=entry.body;
       if(!data||typeof data!=='object'||Array.isArray(data)){send(400,{detail:'Body is not a JSON object'});return;}
       if(!Array.isArray(data.items)||!data.items.length||data.items.length>100||data.items.some(item=>!item||typeof item!=='object')){send(422,{detail:'items'});return;}
@@ -118,6 +151,7 @@ export function startMockGateway(token='test-local-token'){
         token,
         calls,
         jobs,
+        control,
         complete(jobId,index,image){
           const job=jobs.get(jobId);
           const item=job.items[index];

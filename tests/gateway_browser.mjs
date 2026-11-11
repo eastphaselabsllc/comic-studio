@@ -141,6 +141,10 @@ try{
   await delay(300);
   const shown=await evalPage(`document.querySelectorAll('.panel-card img[data-image-id]').length`);
   if(shown<3)throw Error('storyboard did not show the resumed panels: '+shown);
+  const engines=await evalPage(`[...document.querySelectorAll('.engine-tag')].map(node=>node.textContent)`);
+  if(!Array.isArray(engines)||engines.length<3||engines.some(label=>label!=='PC face match'))throw Error('panels did not say which engine made them: '+JSON.stringify(engines));
+  await evalPage(`document.querySelector('.engine-tag')?.scrollIntoView({block:'center'})`);
+  await delay(200);
   await shot('local-job-resumed');
   if(blocked.length)throw Error('Venice was called: '+blocked.join(','));
   const bad=logs.filter(line=>/EXC |TypeError|ReferenceError/.test(line));
