@@ -85,7 +85,7 @@ try{
     req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains('library'))db.createObjectStore('library');if(!db.objectStoreNames.contains('assets'))db.createObjectStore('assets',{keyPath:'id'});};
     req.onerror=()=>reject(req.error);
     req.onsuccess=()=>{const db=req.result;const tx=db.transaction('library','readwrite');
-      tx.objectStore('library').put({schemaVersion:1,characters:[{id:'c1',age:32,fictional:true,refId:null,name:'Mira Vale',description:'An expressive adult woman with amber eyes.',personality:'Warm',backstory:'A cartographer.',body:'Athletic adult build',hair:'Dark curls',outfit:'Copper jacket',tattoos:'A constellation'}],series:[{id:'s1',title:'Keep Me',synopsis:'Two grown explorers.',style:'Stylized adult comic art.',episodes:[{id:'e1',title:'Garden',script:'Mira waits under the glass.\\n\\nRowan smiles at the flowers.\\n\\nThe shuttle is already gone.',previousScript:'',cast:['c1'],pages:[]}]}]},'root');
+      tx.objectStore('library').put({schemaVersion:1,characters:[{id:'c1',age:32,fictional:true,refId:null,name:'Mira Vale',description:'An expressive adult woman with amber eyes.',personality:'Warm',backstory:'A cartographer.',body:'Athletic adult build',hair:'Dark curls',outfit:'Copper jacket',tattoos:'A constellation'}],series:[{id:'s1',title:'Keep Me',synopsis:'Two grown explorers.',style:'Stylized adult comic art.',episodes:[{id:'e1',title:'Garden',script:'Mira: Stay with me tonight.\\n\\nRowan smiles. \"I am already here.\"\\n\\nThe shuttle is already gone.',previousScript:'',cast:['c1'],pages:[]}]}]},'root');
       tx.oncomplete=()=>{db.close();resolve('seeded');};tx.onerror=()=>reject(tx.error);};
   })`,true);
   await load(`${origin}/`);
@@ -118,6 +118,8 @@ try{
   await evalPage(`(()=>{window.__venice=0;const orig=window.fetch.bind(window);window.fetch=(...args)=>{const url=String(args[0]&&args[0].url||args[0]);if(/venice\\.ai/i.test(url))window.__venice++;return orig(...args);};[...document.querySelectorAll('button')].find(b=>b.textContent.includes('4-panel comic')).click();})()`);
   const generated=await evalPage(`new Promise((resolve,reject)=>{const start=Date.now();const timer=setInterval(()=>{const cards=document.querySelectorAll('.panel-card').length;const imgs=[...document.querySelectorAll('.panel-card img')].filter(img=>img.src&&!img.hidden).length;const note=document.querySelector('#notice')?.textContent||'';const err=document.querySelector('#notice.error')?.textContent||'';if(err){clearInterval(timer);reject(new Error(err));return;}if(cards>=4&&imgs>=4){clearInterval(timer);resolve({cards,imgs,note,count:document.querySelector('#batchCount')?.textContent||''});}if(Date.now()-start>60000){clearInterval(timer);reject(new Error('generate timeout cards='+cards+' imgs='+imgs+' note='+note+' batch='+(document.querySelector('#batchCount')?.textContent||'')));}},200);})`,true);
   if(generated.imgs<4) throw Error('images missing '+JSON.stringify(generated));
+  const autoLettering=await evalPage(`document.querySelectorAll('.panel-card .bubble, .panel-card .placed-bubble, .panel-card .caption, .panel-card .lettering-layer').length`);
+  if(autoLettering) throw Error('generated panels already have speech bubbles: '+autoLettering);
   const venice=await evalPage('window.__venice||0');
   if(venice) throw Error('Venice was called '+venice+' times');
   await evalPage(`(()=>{[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Speech bubbles').click();})()`);

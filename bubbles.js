@@ -64,18 +64,8 @@ export function dragUpdate(mode,orig,start,point){
   return moveBubble(orig,orig.x+dx,orig.y+dy);
 }
 export function seedBubbles(panel){
-  if(Array.isArray(panel?.bubbles)&&panel.bubbles.length) return panel.bubbles.map(normalizeBubble).filter(Boolean);
-  const bubbles=[];
-  const lines=String(panel?.dialogue||'').split('\n').map(s=>s.trim()).filter(Boolean).slice(0,5);
-  lines.forEach((line,i)=>{
-    const shout=/!/.test(line)&&!/\?/.test(line);
-    const thought=/^\*[^*]+\*$/.test(line)||/^\([^)]+\)$/.test(line);
-    const text=line.replace(/^[^:]{1,40}:\s+/,'');
-    bubbles.push(createBubble(thought?'thought-cloud':shout?'shout-burst':'round-speech',{text,x:0.08+(i%2)*0.3,y:Math.min(0.7,0.04+i*0.18),tailX:i%2?0.28:-0.22,tailY:0.86}));
-  });
-  const caption=String(panel?.caption||'').trim();
-  if(caption) bubbles.push(createBubble('caption-box',{text:caption,x:0.08,y:0.78,w:0.84,h:0.16,tailX:0.02,tailY:0.7}));
-  return bubbles;
+  if(!Array.isArray(panel?.bubbles)||!panel.bubbles.length) return [];
+  return panel.bubbles.map(normalizeBubble).filter(Boolean);
 }
 export function tailPoint(b){return {x:b.x+b.w/2+b.tailX*b.w,y:b.y+b.h/2+b.tailY*b.h};}
 export function pointTailPath(b){
@@ -103,7 +93,7 @@ export function renderLettering(bubbles,{interactive=false,selected=null}={}){
     const tip=tailPoint(b);
     const hx=((tip.x-b.x)/b.w)*100, hy=((tip.y-b.y)/b.h)*100;
     const body=interactive
-      ? `<textarea data-bubble-text="${esc(b.id)}" maxlength="500" aria-label="Bubble text">${esc(b.text)}</textarea><button type="button" class="handle move" data-handle="move" aria-label="Move bubble">✥</button><button type="button" class="handle tail" data-handle="tail" style="left:${hx}%;top:${hy}%" aria-label="Move tail"></button><button type="button" class="handle resize" data-handle="resize" aria-label="Resize bubble"></button>`
+      ? `<textarea data-bubble-text="${esc(b.id)}" maxlength="500" aria-label="Bubble text" placeholder="Type here">${esc(b.text)}</textarea><button type="button" class="handle move" data-handle="move" aria-label="Move bubble">✥</button><button type="button" class="handle tail" data-handle="tail" style="left:${hx}%;top:${hy}%" aria-label="Move tail"></button><button type="button" class="handle resize" data-handle="resize" aria-label="Resize bubble"></button>`
       : `<div class="bubble-copy">${esc(b.text)}</div>`;
     return `<div class="placed-bubble${selected===b.id?' selected':''}" data-bubble-id="${esc(b.id)}" style="left:${b.x*100}%;top:${b.y*100}%;width:${b.w*100}%;height:${b.h*100}%;--fs:${b.fontSize}">${art}${body}</div>`;
   }).join('');
