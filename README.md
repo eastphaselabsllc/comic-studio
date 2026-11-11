@@ -23,7 +23,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Characters: appearance description, adult age and fictional-attestation checks, personality, backstory, body/hair/outfit/tattoo presets, image upload, turnaround-sheet upload and generation.
 - Series > episodes, per-series art style, editable scripts and selected cast, AI polish preview/apply/undo.
 - AI-planned pages and editable panel cards: page layout, camera angle, scene prompt, cast, dialogue, captions, lettering position, add/remove panels and pages, regenerate a single panel.
-- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order through the existing image pipeline, reusing saved character references. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art. New panels are not given speech bubbles, captions, or dialogue lettering.
+- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order, reusing saved character references. With a local image server (and demo mode off) the whole comic is one batch job on the PC, so the phone can lock, switch apps, or close; opening the app again picks up finished panels. Without that server, images still run one at a time through Venice. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art. New panels are not given speech bubbles, captions, or dialogue lettering.
 - Speech bubbles are added only by hand. Pick a preset, drag it onto the panel, and type. They stay overlays on top of the art in the reader and in a page download. Image requests also tell the model not to draw balloons or words, and quoted speech is removed from the scene text sent to the image model.
 - Page reader with previous/next, horizontal swipe, and keyboard navigation.
 - IndexedDB image blobs and library metadata, debounced autosaving, JSON backup/export and validated atomic restore. Backups contain all referenced art, not connection settings or keys.
@@ -47,10 +47,11 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 ### Optional local image server
 
 - The configured endpoint is always preferred for images. Text continues to use Venice (or demo mocks).
-- `POST {localURL}/image/generate`: `{prompt, width, height, steps, cfg_scale, negative_prompt, face_b64?}`.
-- `face_b64` is the first selected character’s saved raster reference, raw base64. This matches `/workspace/faceapi/server_current.py` and the existing Twin request pattern. Response: `{images: ["<raw base64 png>"]}`; raster data URIs also accepted.
-- Local token is separate (`cs_local_k`); **Venice’s key is never leaked to a custom host**. Server may require its own bearer token.
-- A 660-second client deadline accommodates the server’s up-to-600-second render loop; one render at a time in this app. A timed-out render may still be running remotely.
+- `POST {localURL}/image/generate`: `{prompt, width, height, steps, cfg_scale, negative_prompt, face_b64?}`. One panel at a time still uses this path (a single panel, or a reference sheet).
+- **Generate comic**, when a local URL is set and Offline demo is off, sends every unfinished panel as one `POST {localURL}/jobs` batch. The returned `job_id` is saved on the episode in IndexedDB. The app polls `GET /jobs/{id}` (every 3 seconds for the first 30 seconds, then every 9 seconds), stores each finished image with `GET /jobs/{id}/items/{index}`, and `DELETE`s the job after those images are on the device. Locking the screen, switching apps, or closing the PWA does not stop the PC. Coming back, or opening the app again, continues the same job. Cancel calls `POST /jobs/{id}/cancel`.
+- `face_b64` is the saved raster of the character named in that beat (the first named character who has a reference, in the same order as a single local render), raw base64. Response: `{images: ["<raw base64 png>"]}`; raster data URIs also accepted.
+- Local token is separate (`cs_local_k`); **Venice’s key is never leaked to a custom host**. It is sent only as `Authorization: Bearer`. A missing PC or a rejected token is explained in plain language and offers Try again.
+- A 660-second client deadline still applies to a single `POST /image/generate`. Batch status checks are short. The PC renders one panel at a time and keeps the job if the phone sleeps.
 - Failure does not silently spend credits. Cloud fallback is disabled by default; when enabled, local failure still asks permission and then confirms the Venice request.
 - URL must be HTTPS (or localhost for box development), without embedded credentials, query, or fragment. For phones use a reachable, authenticated HTTPS tunnel and appropriate CORS. `127.0.0.1` on a phone is the phone, not the PC.
 
@@ -74,7 +75,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 5. Keep demo mode on until ready; then configure endpoints, save, explicitly load models, and approve each live operation. No paid end-to-end testing has been performed.
 6. Export backup before changing origin/domain; browser data is origin-specific and is not shared with the box preview.
 
-**Runtime files:** `index.html`, `styles.css`, `app.js`, `core.js`, `db.js`, `provider.js`, `batch.js`, `bubbles.js`, `bubbles/*.svg`, `manifest.json`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`.
+**Runtime files:** `index.html`, `styles.css`, `app.js`, `core.js`, `db.js`, `provider.js`, `batch.js`, `jobs.js`, `bubbles.js`, `bubbles/*.svg`, `manifest.json`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`.
 
 ## Speech bubbles
 
@@ -103,6 +104,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.5
+
+- Generate comic uses the local gateway’s batch job when a local image server URL is set and Offline demo is off. The job id is stored with the episode, polling resumes after the phone sleeps or the app is closed, and finished panels are saved in script order. Venice is unchanged when no local server is set. Service worker cache is `comic-studio-v1.5.0`.
 
 ### v1.4
 
