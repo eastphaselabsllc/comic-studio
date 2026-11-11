@@ -1,10 +1,16 @@
-import {assetIds,validateLibrary,uid} from './core.js';
+import {assetIds,validateLibrary,uid,libraryNeedsMigration,migrateLibrary} from './core.js';
 let db;
-export async function openDB(){return db||new Promise((resolve,reject)=>{const r=indexedDB.open('comic-studio',1);r.onupgradeneeded=()=>{r.result.createObjectStore('library');r.result.createObjectStore('assets',{keyPath:'id'});};r.onsuccess=()=>{db=r.result;resolve(db);};r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('Close other Comic Studio tabs and reopen.'));});}
+export const DB_NAME='comic-studio';
+export const DB_VERSION=2;
+export function upgradeDatabase(database){
+  if(!database.objectStoreNames.contains('library')) database.createObjectStore('library');
+  if(!database.objectStoreNames.contains('assets')) database.createObjectStore('assets',{keyPath:'id'});
+}
+export async function openDB(){return db||new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{upgradeDatabase(r.result);};r.onsuccess=()=>{db=r.result;resolve(db);};r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('Close other Comic Studio tabs and reopen.'));});}
 export async function get(store,key){const d=await openDB();return new Promise((resolve,reject)=>{const r=d.transaction(store).objectStore(store).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
 async function write(store,value,key){const d=await openDB();return new Promise((resolve,reject)=>{const tx=d.transaction(store,'readwrite');key===undefined?tx.objectStore(store).put(value):tx.objectStore(store).put(value,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Storage transaction aborted.'));});}
 export const saveLibrary=lib=>write('library',structuredClone(lib),'root');
-export const getLibrary=()=>get('library','root');
+export async function getLibrary(){const raw=await get('library','root');if(!raw)return null;try{if(!libraryNeedsMigration(raw))return raw;const migrated=migrateLibrary(raw);if(!migrated||typeof migrated!=='object'||!Array.isArray(migrated.series)||!Array.isArray(migrated.characters))return raw;await saveLibrary(migrated);return migrated;}catch{return raw;}}
 export const getAsset=id=>get('assets',id);
 export async function putAsset(blob){if(!(blob instanceof Blob)||!/^image\/(png|jpeg|webp)$/.test(blob.type)||blob.size>12*1024*1024)throw Error('Image must be a PNG, JPEG, or WebP under 12 MB.');const id=uid();await write('assets',{id,blob});return id;}
 export const blobURL=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});

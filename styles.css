@@ -40,3 +40,36 @@ dialog::backdrop{background:#35283280}
 .comic-page{background:#FFFFFF;border-color:#FFFFFF}
 .comic-page .panel-art{border-color:#577D7A}
 .danger-zone{border-color:#D593AD}
+#batchStatus[hidden]{display:none}
+#batchStatus:not([hidden]){position:fixed;left:16px;right:16px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:45;max-width:650px;margin:auto;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:0 10px 32px #66314626}
+#batchCount{font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;font-size:20px}
+#batchStatus progress{width:100%;height:14px;accent-color:var(--accent);margin:8px 0}
+#batchNote:empty{display:none}
+body:has(#batchStatus:not([hidden])) #notice{bottom:calc(230px + env(safe-area-inset-bottom))}
+.error-note{color:var(--danger);font-size:13px;margin:8px 0}
+.panel-art{container-type:inline-size}
+.lettering-layer,.lettering-layer *{pointer-events:none}
+.lettering-layer.editing .placed-bubble,.lettering-layer.editing .placed-bubble textarea,.lettering-layer.editing .placed-bubble .handle{pointer-events:auto}
+.tail-layer{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.tail-layer path,.tail-layer circle{fill:#fffaf7;stroke:#352832;stroke-width:8;stroke-linejoin:round}
+.placed-bubble{position:absolute;overflow:visible}
+.placed-bubble .bubble-art,.bubble-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.bubble-fallback{background:#fffaf7;border:2px solid #352832;border-radius:18px}
+.bubble-copy,.placed-bubble textarea{position:absolute;left:14%;top:24%;width:72%;height:52%;display:flex;align-items:center;justify-content:center;text-align:center;color:#352832;font-family:"Chalkboard SE","Marker Felt","Comic Sans MS",Georgia,serif;font-size:16px;font-size:calc(var(--fs, 0.042) * 100cqw);line-height:1.15;white-space:pre-wrap;overflow:hidden}
+.placed-bubble textarea{min-height:0;resize:none;border:0;padding:0;margin:0;background:transparent;box-shadow:none;-webkit-appearance:none;display:block}
+.bubble-stage{position:relative;aspect-ratio:4/5;width:min(100%,calc(58dvh * .8));margin:0 auto;background:#1b1620;border-radius:14px;overflow:hidden;touch-action:none;container-type:inline-size}
+.bubble-stage .panel-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bubble-stage .handle{position:absolute;width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;border:2px solid var(--accent);background:#fff;color:var(--accent);font-size:18px;z-index:3;touch-action:none}
+.bubble-stage .handle.move{left:0;top:0;transform:translate(-18%,-62%);z-index:4}
+.bubble-stage .handle.resize{right:6px;bottom:6px}
+.bubble-stage .handle.resize:before{content:"";width:12px;height:12px;border-right:3px solid var(--accent);border-bottom:3px solid var(--accent)}
+.bubble-stage .handle.tail{background:var(--lavender);border-color:#06585c;transform:translate(-50%,-50%)}
+.placed-bubble.selected{z-index:2;outline:2px solid var(--accent);outline-offset:1px}
+.preset-row{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;-webkit-overflow-scrolling:touch}
+.preset-row button{flex:1 1 0;min-width:58px;min-height:68px;background:#fff;color:var(--accent);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;padding:4px}
+.preset-row img{width:100%;max-width:64px;height:32px;object-fit:contain}
+.lettering-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bubble-tools label{margin:0}
+.bubble-jump{position:absolute;right:8px;bottom:8px;z-index:6;pointer-events:auto;min-height:36px;padding:6px 10px;font-size:12px;background:var(--accent);color:#fff}
+#lettering[open]{display:flex;flex-direction:column;width:min(100vw,760px);height:100dvh;max-height:100dvh;max-width:100vw;margin:0 auto;border-radius:0;padding:calc(10px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));overflow:auto}
+#letteringContent{display:flex;flex-direction:column;gap:8px;min-height:0}

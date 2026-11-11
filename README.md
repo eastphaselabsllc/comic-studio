@@ -23,7 +23,8 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Characters: appearance description, adult age and fictional-attestation checks, personality, backstory, body/hair/outfit/tattoo presets, image upload, turnaround-sheet upload and generation.
 - Series > episodes, per-series art style, editable scripts and selected cast, AI polish preview/apply/undo.
 - AI-planned pages and editable panel cards: page layout, camera angle, scene prompt, cast, dialogue, captions, lettering position, add/remove panels and pages, regenerate a single panel.
-- Speech bubbles and captions remain HTML overlays, never baked into generated art.
+- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order through the existing image pipeline, reusing saved character references. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art.
+- Speech bubbles and captions remain overlays, never baked into the generated art. The speech-bubble editor places preset bubbles (round speech, thought, shout, whisper, caption) on a finished panel: drag, resize, move or flip the tail, type, change font size, and delete. They save with the panel and draw on top in the reader and in a page download.
 - Page reader with previous/next, horizontal swipe, and keyboard navigation.
 - IndexedDB image blobs and library metadata, debounced autosaving, JSON backup/export and validated atomic restore. Backups contain all referenced art, not connection settings or keys.
 - Raster-image validation/resize, text escaping, no external scripts or analytics, CSP, no network API caching.
@@ -60,7 +61,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Client checks enforce adult ages, fictional-character attestation, minor/school-age/age-ambiguous terms, non-consent, and animal-sex terms. Explicit adult content and nudity between consenting fictional adults is allowed. Inputs, generated text, plans, and imported metadata are checked. **These are heuristic client-side guardrails, not tamper-proof moderation or visual age verification.** Uploaded/generated raster art is not automatically content-classified. A production backend needs independent moderation and policy enforcement.
 - Local reference conditioning supports **one face only**. Multi-character consistency and exact tattoo placement are not solved. Turnaround sheets may be weaker FaceID inputs than a clean front portrait.
 - Service worker caches only the app shell, never API requests, credentials, backups, or image blobs. Browser website-data eviction still removes the library; export regularly. Persistent-storage requests may be denied, including on mobile Safari.
-- v1 caps: 100 characters, 100 series, 200 episodes/series, 12 pages/episode, 6 panels/page, 36 panels/episode. Upload up to 20 MB; raster refs resized to 1536px; backup import limited to 100 MB. Very large libraries need chunked/ZIP backup in a future version.
+- v1 caps: 100 characters, 100 series, 200 episodes/series, 12 pages/episode, 6 panels/page, 72 panels/episode. The quick **Plan pages** action still asks for at most 36 panels. **Generate comic** uses the Settings panel count, default 45. Upload up to 20 MB; raster refs resized to 1536px; backup import limited to 100 MB. Very large libraries need chunked/ZIP backup in a future version.
 - No sync/multiplayer, panel reorder/drag-resize, PDF/CBZ export, advanced lettering placement, or guaranteed character continuity. No actual iPhone/Safari hardware validation yet.
 - User style-reference attachment path in the brief was not present on this executor’s box; no personal style images were embedded. The default style uses the written description.
 
@@ -73,7 +74,17 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 5. Keep demo mode on until ready; then configure endpoints, save, explicitly load models, and approve each live operation. No paid end-to-end testing has been performed.
 6. Export backup before changing origin/domain; browser data is origin-specific and is not shared with the box preview.
 
-**Runtime files:** `index.html`, `styles.css`, `app.js`, `core.js`, `db.js`, `provider.js`, `manifest.json`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`.
+**Runtime files:** `index.html`, `styles.css`, `app.js`, `core.js`, `db.js`, `provider.js`, `batch.js`, `bubbles.js`, `bubbles/*.svg`, `manifest.json`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`.
+
+## Speech bubbles
+
+Open a panel that already has art and tap **Speech bubbles** (or **Bubbles** in the reader). Pick a preset, then:
+
+- Drag the bubble, or the ✥ handle, to place it. Drag the corner to resize. Drag the teal dot to aim the tail.
+- Tap the words to type. Font size is the slider. **Flip tail** mirrors the art and the tail. **Delete** removes the selected bubble.
+- **Done** saves the bubbles on that panel. They stay on top of the art in the storyboard, the reader, and **↓ Page**.
+
+To add your own bubble art later, drop a PNG or SVG into `bubbles/` and append one entry to `BUBBLE_PRESETS` in `bubbles.js` (`id`, `name`, `src`, `tail` of `point`, `circles`, or `none`). The app draws the tail, so the file only needs to be the body. New files under `bubbles/` are cached by the service worker after they are requested; built-ins are precached. Bump `CACHE` in `sw.js` when you ship the change so installed phones pick it up.
 
 Do not deploy the tests, generated test backup, or this README if you only want the application public. Increment the service-worker cache version whenever deploying updates.
 
@@ -92,6 +103,12 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.2
+
+- Generate a full comic from the script. Panel count is a setting, default 45. Images run one at a time with progress, cancel, and resume that skips finished panels. IndexedDB upgrades from v1 to v2 without clearing stories; panels gain a `bubbles` array.
+- Speech-bubble editor with five built-in SVG presets and a single `BUBBLE_PRESETS` list for adding more.
+- Service worker cache is `comic-studio-v1.2.0`.
 
 ### v1.1
 
