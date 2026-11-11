@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULT_PANEL_COUNT, clampPanelCount, splitScriptIntoBeats, buildEpisodePages, normalizePlan, panelJob, PLAN_MAX_PANELS} from '../core.js';
+import {DEFAULT_PANEL_COUNT, clampPanelCount, splitScriptIntoBeats, buildEpisodePages, normalizePlan, panelJob, panelPrompt, characterSeed, PLAN_MAX_PANELS} from '../core.js';
 import {runPanelBatch} from '../batch.js';
 
 const script=Array.from({length:20},(_,i)=>`Scene ${i+1}. Mira and Rowan, both fictional adults, keep walking through the orbital garden.`).join('\n\n');
@@ -70,6 +70,62 @@ test('disallowed model text is dropped and a disallowed script still fails', ()=
   assert.match(pages[0].panels[0].prompt, /Mira/);
   assert.throws(()=>buildEpisodePages({script:'A child walks in.',cast:['c1'],count:4}), /Adults only|18/);
   assert.throws(()=>splitScriptIntoBeats('   ', 45), /Write your episode/);
+});
+
+test('generate comic keeps script order and the cast named in each panel', ()=>{
+  const script=[
+    'Mira opens the kitchen door.',
+    'The kitchen is quiet.',
+    'Rowan stands outside with the keys.',
+    'Mira hands Rowan the box.'
+  ].join('\n\n');
+  const characters=[{id:'c1',name:'Mira'},{id:'c2',name:'Rowan'}];
+  const pages=buildEpisodePages({
+    script,
+    cast:['c1','c2'],
+    count:4,
+    characters,
+    plan:{pages:[{layout:'single',panels:[{prompt:'A stranger waves.',camera:'Wide shot',dialogue:'',caption:'',cast:['c2']}]}]}
+  });
+  const panels=pages.flatMap(p=>p.panels);
+  assert.equal(panels.length, 4);
+  assert.match(panels[0].prompt, /stranger/);
+  assert.deepEqual(panels[0].cast, ['c1']);
+  assert.match(panels[1].prompt, /quiet/);
+  assert.deepEqual(panels[1].cast, ['c1','c2']);
+  assert.match(panels[2].prompt, /keys/);
+  assert.deepEqual(panels[2].cast, ['c2']);
+  assert.match(panels[3].prompt, /box/);
+  assert.deepEqual(panels[3].cast, ['c1','c2']);
+  const blob=panels.map(p=>p.prompt).join('\n');
+  assert.ok(blob.indexOf('quiet')<blob.indexOf('keys'));
+  assert.ok(blob.indexOf('keys')<blob.indexOf('box'));
+});
+
+test('image prompts lead with identity and keep it when the scene is shortened', ()=>{
+  const mira={id:'a',name:'Mira',age:32,description:'amber eyes and a silver eyebrow piercing',hair:'dark curls in a loose bun',body:'athletic adult build',outfit:'copper flight jacket',tattoos:'CONSTELLATIONTATTOO on the left forearm',personality:'THIS_PERSONALITY_SHOULD_NOT_APPEAR',backstory:'THIS_BACKSTORY_SHOULD_NOT_APPEAR',refId:'ref-a'};
+  const rowan={id:'b',name:'Rowan',age:35,description:'green eyes',hair:'short black hair',body:'broad shoulders',outfit:'charcoal coat',tattoos:'leaf on the wrist',refId:'ref-b'};
+  const scene=`Garden path. ${'walking further '.repeat(400)}ZEBRAEND`;
+  const prompt=panelPrompt({style:'Ink',camera:'Close-up, three-quarter view',scene,characters:[mira],limit:1200});
+  assert.ok(prompt.length<=1200);
+  assert.match(prompt, /^Exact character identity/);
+  assert.match(prompt, /CONSTELLATIONTATTOO/);
+  assert.match(prompt, /dark curls in a loose bun/);
+  assert.match(prompt, /silver eyebrow piercing/);
+  assert.match(prompt, /Scene:/);
+  assert.ok(prompt.indexOf('Exact character identity')<prompt.indexOf('Scene:'));
+  assert.doesNotMatch(prompt, /THIS_PERSONALITY_SHOULD_NOT_APPEAR/);
+  assert.doesNotMatch(prompt, /THIS_BACKSTORY_SHOULD_NOT_APPEAR/);
+  assert.doesNotMatch(prompt, /ZEBRAEND/);
+  assert.throws(()=>panelPrompt({characters:[{name:'Mira',age:32,description:'x'.repeat(4000)}],limit:500}), /appearance is longer/);
+  const job=panelJob({cast:['b','a'],prompt:'Rowan looks back.',camera:'Close-up'}, [mira,rowan], 'Painted light', {limit:7500});
+  assert.deepEqual(job.referenceIds, ['ref-b','ref-a']);
+  assert.equal(job.seed, characterSeed('b|a'));
+  assert.equal(job.seed, panelJob({cast:['b','a'],prompt:'Again.',camera:'Wide'}, [mira,rowan], 'Painted light').seed);
+  assert.notEqual(job.seed, characterSeed('a'));
+  assert.ok(job.seed>=1&&job.seed<=999999999);
+  assert.ok(job.prompt.indexOf('Rowan')<job.prompt.indexOf('Mira'));
+  assert.ok(job.prompt.startsWith('Exact character identity'));
 });
 
 test('panel jobs reuse only the selected character references', ()=>{

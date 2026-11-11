@@ -34,6 +34,9 @@ label{color:#513A46}
 .bottom-nav button.active{background:#FCE7EF;color:#B92361}
 #notice{background:#086D72;border-color:#06585C;color:#FFFFFF;box-shadow:0 5px 30px #275D5C26}
 #notice.error{background:#FFF0F4;border-color:#CE7595;color:#982047}
+#notice button{margin-top:10px;width:100%}
+.dialog-notice{flex:1 0 100%;margin:0 0 8px;padding:12px 14px;border-radius:12px;background:#E8F6F3;border:1px solid #75B3AD;color:#155B5B;font-size:14px;line-height:1.45;font-weight:600}
+.dialog-notice.error{background:#FFF0F4;border-color:#CE7595;color:#982047}
 dialog{background:#FFFFFF;box-shadow:0 16px 60px #66314626}
 dialog::backdrop{background:#35283280}
 .sticky-actions{background:#FFFFFF}
