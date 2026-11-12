@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildEpisodePages, libraryNeedsMigration, migrateLibrary, validateLibrary} from '../core.js';
 import {Provider, defaults, explainRequestError} from '../provider.js';
-import {buildJobItems, collectGatewayJob, nextPollDelay, resolvePanelId, useLocalJob, waitUntilVisible, JOB_POLL_FAST_MS, JOB_POLL_SLOW_MS} from '../jobs.js';
+import {buildJobItems, collectGatewayJob, driveImageJobs, hasImageJob, jobBodyBytes, nextPollDelay, normalizeImageJob, resolvePanelId, useLocalJob, waitUntilVisible, JOB_POLL_FAST_MS, JOB_POLL_SLOW_MS} from '../jobs.js';
 import {startMockGateway} from './mock-gateway.js';
 
 const memory=new Map();
@@ -318,4 +318,96 @@ test('polling stays fast for 30 seconds and then slows', async ()=>{
     assert.deepEqual(delays.slice(0,10),Array(10).fill(3000));
     assert.equal(delays[10],9000);
   }finally{await gw.close();}
+});
+
+test('comic sends are split, stay in script order, and a failed send can be retried without Venice', async ()=>{
+  const gw=await startMockGateway('test-local-token',{rejectAfter:1});
+  const urls=[];
+  const original=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{urls.push(String(url));return original(url,opts);};
+  try{
+    localStorage.setItem('cs_k','venice-key-should-not-leak');
+    localStorage.setItem('cs_local_k',gw.token);
+    const provider=new Provider({...defaults,demo:false,localURL:gw.url},async()=>{throw Error('a failed local send must not ask for Venice');});
+    const beats=Array.from({length:8},(_,i)=>`Mira crosses the garden, beat ${i+1}.`);
+    const panels=buildEpisodePages({script:beats.join('\n\n'),cast:['c1'],count:8,characters:[mira]}).flatMap(page=>page.panels);
+    const built=await buildJobItems(panels,[mira],'Ink',faces);
+    assert.equal(built.panelIds.length,8);
+    const one=jobBodyBytes([built.items[0]]);
+    const two=jobBodyBytes(built.items.slice(0,2));
+    const budget=two-1;
+    assert.ok(budget>=one);
+    const record={parts:[],rest:built.panelIds.slice(),startedAt:Date.now()};
+    const byId=new Map(built.panelIds.map((id,index)=>[id,built.items[index]]));
+    const wire={
+      itemFor:async id=>byId.get(id)||null,
+      createJob:items=>provider.createImageJob(items),
+      poll:async jobId=>{
+        const job=gw.jobs.get(jobId);
+        job.items.forEach((item,index)=>{if(item.status==='queued')gw.complete(jobId,index,'IMG-'+item.id);});
+        return provider.imageJobStatus(jobId);
+      },
+      fetchItem:(jobId,index)=>provider.imageJobItem(jobId,index),
+      deleteJob:jobId=>provider.deleteImageJob(jobId),
+      cancelJob:jobId=>provider.cancelImageJob(jobId),
+      sleep:async()=>{throw Error('finished parts should not wait');},
+      budget
+    };
+    await assert.rejects(()=>driveImageJobs({record,...wire,saveItem:async()=>{}}),error=>{
+      assert.equal(error.local,true);
+      assert.equal(error.retryable,true);
+      assert.match(explainRequestError(error),/try again/i);
+      assert.doesNotMatch(explainRequestError(error),/Venice/);
+      return true;
+    });
+    assert.equal(record.parts.length,1);
+    assert.deepEqual(record.parts[0].panelIds.concat(record.rest),built.panelIds);
+    assert.equal(record.jobId,record.parts[0].jobId);
+    assert.equal(gw.calls.filter(call=>call.method==='POST'&&call.path==='/jobs').length,2);
+    gw.control.rejectAfter=null;
+    const saved=[];
+    const done=await driveImageJobs({
+      record,
+      ...wire,
+      saveItem:async(panelId,image)=>{saved.push({panelId,image});}
+    });
+    assert.equal(done.finished,true);
+    assert.equal(done.deleted,true);
+    assert.deepEqual(saved.map(item=>item.panelId),built.panelIds);
+    assert.deepEqual(saved.map(item=>item.image),built.panelIds.map(id=>'IMG-'+id));
+    assert.ok(gw.calls.filter(call=>call.method==='POST'&&call.path==='/jobs').length>2);
+    assert.equal(gw.jobs.size,0);
+    assert.equal(urls.some(url=>/venice\.ai/i.test(url)),false);
+    assert.equal(JSON.stringify(gw.calls).includes('venice-key-should-not-leak'),false);
+    const legacyProvider=provider;
+    const legacyPanels=built.panelIds.slice(0,2);
+    const legacyItems=legacyPanels.map(id=>byId.get(id));
+    const legacyCreated=await legacyProvider.createImageJob(legacyItems);
+    const legacy={jobId:legacyCreated.job_id,panelIds:legacyPanels.slice(),fetched:[]};
+    assert.equal(hasImageJob(legacy),true);
+    assert.equal(normalizeImageJob(legacy).parts[0].jobId,legacyCreated.job_id);
+    const legacySaved=[];
+    const postsBefore=gw.calls.filter(call=>call.method==='POST'&&call.path==='/jobs').length;
+    const resumed=await driveImageJobs({
+      record:legacy,
+      itemFor:async id=>byId.get(id)||null,
+      createJob:()=>{throw Error('an in-progress job should not be sent again');},
+      poll:async jobId=>{
+        const job=gw.jobs.get(jobId);
+        job.items.forEach((item,index)=>{if(item.status==='queued')gw.complete(jobId,index,'OLD-'+item.id);});
+        return legacyProvider.imageJobStatus(jobId);
+      },
+      fetchItem:(jobId,index)=>legacyProvider.imageJobItem(jobId,index),
+      saveItem:async(panelId,image)=>{legacySaved.push({panelId,image});},
+      deleteJob:jobId=>legacyProvider.deleteImageJob(jobId),
+      cancelJob:jobId=>legacyProvider.cancelImageJob(jobId),
+      sleep:async()=>{throw Error('should finish');}
+    });
+    assert.equal(resumed.finished,true);
+    assert.deepEqual(legacySaved.map(item=>item.panelId),legacyPanels);
+    assert.equal(gw.calls.filter(call=>call.method==='POST'&&call.path==='/jobs').length,postsBefore);
+  }finally{
+    globalThis.fetch=original;
+    await gw.close();
+  }
 });

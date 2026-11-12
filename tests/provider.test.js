@@ -153,3 +153,21 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.match(seen[0].prompt, /dark curls/);
   assert.equal(await readChatStream(new Response('data: {"choices":[{"delta":{"content":"A"}}]}\n\ndata: {"choices":[{"delta":{"content":"B"}}]}\n\ndata: [DONE]\n\n', {headers:{'content-type':'text/event-stream'}})), 'AB');
 });
+
+test('a configured local server does not fall back to Venice when the picture fails', async ()=>{
+  localStorage.setItem('cs_k','venice-key-should-not-be-sent');
+  localStorage.setItem('cs_local_k','local-token');
+  const urls=[];
+  globalThis.fetch=async url=>{urls.push(String(url));throw new TypeError('Load failed');};
+  const provider=new Provider({...defaults,demo:false,localURL:'https://pc.example',allowCloudFallback:true},async()=>{throw Error('should not ask to switch to Venice');});
+  await assert.rejects(()=>provider.image('Two fictional adults stand in a garden.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true}),error=>{
+    assert.equal(error.local,true);
+    assert.equal(error.retryable,true);
+    assert.match(error.message,/try again/i);
+    assert.doesNotMatch(error.message,/Venice/);
+    return true;
+  });
+  assert.ok(urls.some(url=>url.startsWith('https://pc.example/image/generate')));
+  assert.equal(urls.some(url=>/venice\.ai/i.test(url)),false);
+  assert.equal(JSON.stringify(urls).includes('venice-key-should-not-be-sent'),false);
+});
