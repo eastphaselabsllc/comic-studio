@@ -116,6 +116,7 @@ export function startMockGateway(token='test-local-token',options={}){
       const index=Number(itemMatch[2]);
       const item=job.items[index];
       if(!item){send(404,{detail:'Unknown item'});return;}
+      if(item._reject){send(item._reject.status||422,{detail:item._reject.detail||'No face found'});return;}
       if(item.status!=='done'){send(409,{detail:'Item is '+item.status,status:item.status,index,id:item.id});return;}
       send(200,{images:[item._image]});
       return;
@@ -166,6 +167,14 @@ export function startMockGateway(token='test-local-token',options={}){
           const item=job.items[index];
           item.status='error';
           item.message=message;
+          refresh(job);
+          return publicJob(job);
+        },
+        rejectItem(jobId,index,detail='No face found',status=422){
+          const job=jobs.get(jobId);
+          const item=job.items[index];
+          item.status='done';
+          item._reject={status,detail};
           refresh(job);
           return publicJob(job);
         },

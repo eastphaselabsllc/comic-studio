@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildEpisodePages, libraryNeedsMigration, migrateLibrary, validateLibrary} from '../core.js';
 import {Provider, defaults, explainRequestError} from '../provider.js';
-import {buildJobItems, collectGatewayJob, driveImageJobs, hasImageJob, jobBodyBytes, nextPollDelay, normalizeImageJob, resolvePanelId, useLocalJob, waitUntilVisible, JOB_POLL_FAST_MS, JOB_POLL_SLOW_MS} from '../jobs.js';
+import {buildJobItems, collectGatewayJob, driveImageJobs, episodeCharacterPool, hasImageJob, jobBodyBytes, nextPollDelay, normalizeImageJob, resolvePanelId, useLocalJob, waitUntilVisible, JOB_POLL_FAST_MS, JOB_POLL_SLOW_MS} from '../jobs.js';
 import {startMockGateway} from './mock-gateway.js';
 
 const memory=new Map();
@@ -65,7 +65,129 @@ test('job items stay in script order and use the face of the person named in tha
   }
   const quiet=buildEpisodePages({script:'The kitchen is quiet.',cast:['c1','c2'],count:1,characters:[mira,rowan]});
   const quietJob=await buildJobItems(quiet.flatMap(page=>page.panels),[rowan,mira],'Ink',faces);
-  assert.equal(quietJob.items[0].face_b64, faceA);
+  assert.equal(quietJob.items[0].face_b64, undefined);
+  assert.doesNotMatch(quietJob.items[0].prompt, /Do not show/);
+  assert.match(quietJob.items[0].negative_prompt, /face tattoo, facial tattoo, neck tattoo, cheek markings/);
+});
+
+test('each panel uses its focus character, restates appearance, and keeps body tattoos off close-ups', async ()=>{
+  const miraVale={...mira,name:'Mira Vale',description:'An adult woman with warm brown skin, amber eyes, and a silver piercing.',tattoos:'Fine geometric constellation on the left forearm'};
+  const rowanAsh={...rowan,name:'Rowan Ash',description:'An adult man with olive skin and green eyes.',tattoos:'a leaf on the right wrist'};
+  const cheek={...mira,id:'c4',name:'Nia Cole',refId:'ref-nia',description:'amber eyes',tattoos:'a small star tattoo on the left cheek',hair:'auburn waves'};
+  const looked=[];
+  const faceFor=id=>{looked.push(id);return faces(id);};
+  const stuck=[
+    {id:'p-rowan',prompt:'Rowan waits on the platform.',camera:'Over the shoulder',cast:['c1','c2'],dialogue:'',caption:'',imageId:null},
+    {id:'p-mira',prompt:'Mira studies the map.',camera:'Wide establishing shot',cast:['c1','c2'],dialogue:'',caption:'',imageId:null},
+    {id:'p-quiet',prompt:'The docking bay is empty.',camera:'Medium shot, eye level',cast:['c1','c2'],dialogue:'',caption:'',imageId:null},
+    {id:'p-close',prompt:'Close on Rowan as Mira talks with Mira about the map.',camera:'Close-up, three-quarter view',cast:['c1','c2'],dialogue:'',caption:'',imageId:null},
+    {id:'p-rear',prompt:'Mira watches the stars from behind.',camera:'Over the shoulder',cast:['c1','c2'],dialogue:'',caption:'',imageId:null},
+    {id:'p-tie',prompt:'Mira hands Rowan the box.',camera:'Medium shot, eye level',cast:['c2','c1'],dialogue:'',caption:'',imageId:null},
+    {id:'p-dialogue',prompt:'The hall is quiet.',camera:'Head and shoulders',cast:['c1','c2'],dialogue:'Rowan: I kept the light on.',caption:'',imageId:null},
+    {id:'p-count',prompt:'Mira passes the window. Rowan looks at Rowan.',camera:'Wide establishing shot',cast:['c1','c2'],dialogue:'',caption:'',imageId:null}
+  ];
+  const pool=episodeCharacterPool([miraVale,rowanAsh,{...nora,name:'Nora Quinn'}],['c1','c2'],stuck);
+  assert.deepEqual(pool.map(c=>c.id),['c1','c2']);
+  const built=await buildJobItems(stuck,pool,'Ink',faceFor);
+  const byId=new Map(built.items.map(item=>[item.id,item]));
+  assert.equal(byId.get('p-rowan').face_b64, faceB);
+  assert.match(byId.get('p-rowan').prompt, /Rowan Ash, exact appearance:/);
+  assert.match(byId.get('p-rowan').prompt, /short black hair/);
+  assert.match(byId.get('p-rowan').prompt, /green eyes/);
+  assert.match(byId.get('p-rowan').prompt, /olive skin/);
+  assert.match(byId.get('p-rowan').prompt, /Do not show Rowan Ash from behind/);
+  assert.match(byId.get('p-rowan').prompt, /Three-quarter or front view, face visible/);
+  assert.doesNotMatch(byId.get('p-rowan').prompt, /Over the shoulder/);
+  assert.ok(byId.get('p-rowan').prompt.indexOf('exact appearance')<byId.get('p-rowan').prompt.indexOf('Scene:'));
+  assert.equal(byId.get('p-mira').face_b64, faceA);
+  assert.match(byId.get('p-mira').prompt, /warm brown skin/);
+  assert.match(byId.get('p-mira').prompt, /amber eyes/);
+  assert.match(byId.get('p-mira').prompt, /left forearm/);
+  assert.equal(byId.get('p-quiet').face_b64, undefined);
+  assert.equal(looked.includes(''), false);
+  assert.doesNotMatch(byId.get('p-quiet').prompt, /three-quarter or front view/i);
+  assert.equal(byId.get('p-close').face_b64, faceB);
+  assert.match(byId.get('p-close').prompt, /Also in this panel: Mira Vale \(hair dark curls\)/);
+  assert.doesNotMatch(byId.get('p-close').prompt, /forearm|wrist/);
+  assert.match(byId.get('p-close').prompt, /short black hair/);
+  assert.doesNotMatch(byId.get('p-close').prompt, /, and tattoos/);
+  assert.match(byId.get('p-rear').prompt, /from behind/);
+  assert.doesNotMatch(byId.get('p-rear').prompt, /Do not show/);
+  assert.match(byId.get('p-rear').prompt, /Over the shoulder/);
+  assert.equal(byId.get('p-tie').face_b64, faceA);
+  assert.match(byId.get('p-tie').prompt, /Rowan Ash \(hair short black hair\)/);
+  assert.match(byId.get('p-tie').prompt, /left forearm/);
+  assert.equal(byId.get('p-dialogue').face_b64, faceB);
+  assert.doesNotMatch(byId.get('p-dialogue').prompt, /wrist|forearm/);
+  assert.equal(byId.get('p-count').face_b64, faceB);
+  for(const item of built.items){
+    if(item.id==='p-cheek')continue;
+    assert.match(item.negative_prompt, /face tattoo, facial tattoo, neck tattoo, cheek markings/);
+  }
+  const cheekJob=await buildJobItems([{id:'p-cheek',prompt:'Close-up of Nia Cole.',camera:'Head and shoulders',cast:['c4'],dialogue:'',caption:'',imageId:null}],[cheek],'Ink',id=>id==='ref-nia'?`data:image/jpeg;base64,${'N'.repeat(48)}`:'');
+  assert.match(cheekJob.items[0].prompt, /star tattoo on the left cheek/);
+  assert.doesNotMatch(cheekJob.items[0].negative_prompt, /cheek markings/);
+  assert.match(cheekJob.items[0].negative_prompt, /speech bubble/);
+  const word=await buildJobItems([{id:'p-word',prompt:'Rowanwood stays empty while Rowan waits.',camera:'Medium shot',cast:['c2'],dialogue:'',caption:'',imageId:null}],[rowanAsh],'Ink',faces);
+  assert.equal(word.items[0].face_b64, faceB);
+  const ambiguous=await buildJobItems([{id:'p-alex',prompt:'Alex waits by the glass.',camera:'Medium shot',cast:['a1','a2'],dialogue:'',caption:'',imageId:null}],[{id:'a1',name:'Alex Stone',refId:'ref-a',hair:'black hair',description:'brown eyes',age:30},{id:'a2',name:'Alex Reed',refId:'ref-b',hair:'red hair',description:'blue eyes',age:31}],()=>{throw Error('ambiguous names should not look up a face');});
+  assert.equal(ambiguous.items[0].face_b64, undefined);
+  const plain=await buildJobItems([{id:'p-nora',prompt:'Nora waits by the glass.',camera:'Close-up',cast:['c3'],dialogue:'',caption:'',imageId:null}],[nora], 'Ink',()=>{throw Error('a character without a reference is plain generation');});
+  assert.equal(plain.items[0].face_b64, undefined);
+  assert.match(plain.items[0].prompt, /Nora/);
+  assert.doesNotMatch(plain.items[0].prompt, /Do not show/);
+});
+
+test('a 422 no-face result stays on that panel and can be retried without Venice', async ()=>{
+  const gw=await startMockGateway();
+  const urls=[];
+  const original=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{urls.push(String(url));return original(url,opts);};
+  try{
+    localStorage.setItem('cs_k','venice-key-should-not-leak');
+    localStorage.setItem('cs_local_k',gw.token);
+    const provider=new Provider({...defaults,demo:false,localURL:gw.url,allowCloudFallback:true},async()=>{throw Error('no face must not ask for Venice');});
+    const created=await provider.createImageJob([{id:'ok',prompt:'Mira opens the door.'},{id:'miss',prompt:'Rowan faces the camera.'}]);
+    gw.complete(created.job_id,0,'KEPT-PANEL');
+    gw.rejectItem(created.job_id,1,'No face found',422);
+    const record={jobId:created.job_id,panelIds:['ok','miss'],fetched:[]};
+    const saved=[];
+    const result=await collectGatewayJob({
+      record,
+      poll:()=>provider.imageJobStatus(record.jobId),
+      fetchItem:index=>provider.imageJobItem(record.jobId,index),
+      saveItem:async(panelId,image)=>{saved.push({panelId,image});},
+      deleteJob:()=>provider.deleteImageJob(record.jobId),
+      cancelJob:()=>provider.cancelImageJob(record.jobId),
+      sleep:async()=>{throw Error('a finished no-face item should not keep polling');}
+    });
+    assert.equal(result.finished,true);
+    assert.equal(result.deleted,true);
+    assert.deepEqual(saved,[{panelId:'ok',image:'KEPT-PANEL'}]);
+    const missed=result.errors.find(item=>item.panelId==='miss'||item.id==='miss');
+    assert.equal(missed.message,'No face found in this panel. Try again.');
+    assert.equal(missed.status,'error');
+    assert.equal(urls.some(url=>/venice\.ai/i.test(url)),false);
+    assert.equal(JSON.stringify(gw.calls).includes('venice-key-should-not-leak'),false);
+    const reported=await provider.createImageJob([{id:'later',prompt:'Mira waits.'},{id:'bad',prompt:'Rowan waits.'}]);
+    gw.complete(reported.job_id,0,'AGAIN');
+    gw.fail(reported.job_id,1,'No face found');
+    const second=await collectGatewayJob({
+      record:{jobId:reported.job_id,panelIds:['later','bad'],fetched:[]},
+      poll:()=>provider.imageJobStatus(reported.job_id),
+      fetchItem:index=>provider.imageJobItem(reported.job_id,index),
+      saveItem:async()=>{},
+      deleteJob:()=>provider.deleteImageJob(reported.job_id),
+      cancelJob:()=>provider.cancelImageJob(reported.job_id),
+      sleep:async()=>{throw Error('should finish');}
+    });
+    assert.equal(second.errors.find(item=>item.id==='bad').message,'No face found in this panel. Try again.');
+    assert.match(explainRequestError(Object.assign(Error(second.errors.find(item=>item.id==='bad').message),{local:true,retryable:true})),/try again/i);
+    assert.doesNotMatch(explainRequestError(Object.assign(Error(second.errors.find(item=>item.id==='bad').message),{local:true})),/Venice/);
+  }finally{
+    globalThis.fetch=original;
+    await gw.close();
+  }
 });
 
 test('a hidden page waits, and showing it polls again immediately', async ()=>{
@@ -116,7 +238,7 @@ test('the gateway keeps rendering while the phone is gone, then panels land in s
     assert.deepEqual(created.items.map(item=>item.id),built.panelIds);
     const posted=gw.calls.find(call=>call.method==='POST'&&call.path==='/jobs');
     assert.equal(posted.auth,'Bearer '+gw.token);
-    assert.deepEqual(posted.body.items.map(item=>item.face_b64),[faceA,faceA,faceB,faceA]);
+    assert.deepEqual(posted.body.items.map(item=>item.face_b64),[faceA,undefined,faceB,faceA]);
     assert.equal(gw.calls.find(call=>call.path==='/health').auth,'');
     const record={jobId:created.job_id,panelIds:built.panelIds,fetched:[],startedAt:Date.now()};
     gw.complete(record.jobId,1,'MIDDLE-PANEL');

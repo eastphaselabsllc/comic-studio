@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, IMAGE_NEGATIVE} from '../provider.js';
+import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainLocalStatus, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, IMAGE_NEGATIVE, imageNegative, FACE_TATTOO_NEGATIVE} from '../provider.js';
 import {panelPrompt} from '../core.js';
 
 const memory=new Map();
@@ -24,6 +24,12 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   assert.match(IMAGE_NEGATIVE, /speech bubble/);
   assert.match(IMAGE_NEGATIVE, /letters/);
   assert.doesNotMatch(IMAGE_NEGATIVE, /unreadable text/);
+  assert.equal(FACE_TATTOO_NEGATIVE, 'face tattoo, facial tattoo, neck tattoo, cheek markings');
+  assert.match(imageNegative(true), /face tattoo, facial tattoo, neck tattoo, cheek markings/);
+  assert.equal(imageNegative(false), IMAGE_NEGATIVE);
+  assert.equal(explainLocalStatus(422, 'No face found'), 'No face found in this panel. Try again.');
+  assert.match(explainLocalStatus(422, 'items'), /could not accept that comic job/i);
+  assert.doesNotMatch(explainLocalStatus(422, 'No face found'), /Venice/);
   let calls=0;
   globalThis.fetch=()=>{calls++;throw Error('network should not be called');};
   const provider=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
