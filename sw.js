@@ -1,4 +1,4 @@
-const CACHE='comic-studio-v1.6.0';
+const CACHE='comic-studio-v1.7.0';
 const FILES=['./','./index.html','./styles.css','./app.js','./core.js','./db.js','./provider.js','./batch.js','./jobs.js','./face.js','./bubbles.js','./manifest.json','./icon.svg','./icon-192.png','./icon-512.png','./bubbles/round-speech.svg','./bubbles/thought-cloud.svg','./bubbles/shout-burst.svg','./bubbles/whisper-dashed.svg','./bubbles/caption-box.svg'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('comic-studio-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
