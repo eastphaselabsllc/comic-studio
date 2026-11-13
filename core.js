@@ -61,13 +61,13 @@ export function validateLibrary(raw){
     out.episodes=s.episodes.map(e=>{if(!Array.isArray(e.pages)||e.pages.length>EPISODE_MAX_PAGES)throw Error('Invalid page list.');
       const ep={id:unique(e.id),title:str(e.title,200),script:str(e.script||'',60000),previousScript:str(e.previousScript||'',60000),cast:cast(e.cast),pages:[]};assertSafe(ep.title+' '+ep.script+' '+ep.previousScript);
       ep.pages=e.pages.map(p=>{if(!['single','two','hero'].includes(p.layout)||!Array.isArray(p.panels)||!p.panels.length||p.panels.length>PAGE_MAX_PANELS)throw Error('Invalid panel layout.');
-        return {id:unique(p.id),layout:p.layout,panels:p.panels.map(x=>{const n={id:unique(x.id),cast:cast(x.cast),imageId:x.imageId?id(x.imageId):null,bubblePosition:x.bubblePosition==='bottom'?'bottom':'top',captionPosition:x.captionPosition==='top'?'top':'bottom',bubbles:readBubbles(x.bubbles)};if(x.engine==='local'||x.engine==='venice')n.engine=x.engine;for(const f of ['prompt','camera','dialogue','caption'])n[f]=str(x[f]||'',f==='prompt'?5000:2000);assertSafe([n.prompt,n.camera,n.dialogue,n.caption,...n.bubbles.map(b=>b.text)].join('\n'));return n;})};
+        return {id:unique(p.id),layout:p.layout,panels:p.panels.map(x=>{const n={id:unique(x.id),cast:cast(x.cast),imageId:x.imageId?id(x.imageId):null,bubblePosition:x.bubblePosition==='bottom'?'bottom':'top',captionPosition:x.captionPosition==='top'?'top':'bottom',bubbles:readBubbles(x.bubbles)};if(x.veniceId)n.veniceId=id(x.veniceId);if(x.swapId)n.swapId=id(x.swapId);if(x.engine==='local'||x.engine==='venice'||x.engine==='swapped')n.engine=x.engine;if(['no-character','no-reference','server-off','no-faceswap','unswapped'].includes(x.swapNote))n.swapNote=x.swapNote;if(typeof x.swapError==='string'&&x.swapError.trim())n.swapError=str(x.swapError.trim(),400);if(x.view==='original'||x.view==='swapped')n.view=x.view;for(const f of ['prompt','camera','dialogue','caption'])n[f]=str(x[f]||'',f==='prompt'?5000:2000);assertSafe([n.prompt,n.camera,n.dialogue,n.caption,...n.bubbles.map(b=>b.text)].join('\n'));return n;})};
       });if(ep.pages.length>EPISODE_MAX_PAGES)throw Error('Invalid page list.');if(ep.pages.reduce((n,p)=>n+p.panels.length,0)>EPISODE_MAX_PANELS)throw Error('Too many panels.');return ep;});return out;});
   return {schemaVersion:2,characters,series};
 }
 export function assetIds(lib){
   const refs=lib.characters.map(c=>c.refId);
-  const images=lib.series.flatMap(s=>s.episodes.flatMap(e=>e.pages.flatMap(p=>p.panels.map(x=>x.imageId))));
+  const images=lib.series.flatMap(s=>s.episodes.flatMap(e=>e.pages.flatMap(p=>p.panels.flatMap(x=>[x.imageId,x.veniceId,x.swapId]))));
   return [...new Set([...refs,...images].filter(Boolean))];
 }
 export function parseJSON(text){const t=String(text).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'');return JSON.parse(t);}

@@ -10,6 +10,9 @@ export const FACE_MAX_EDGE=640;
 export const FACE_BYTE_BUDGET=48*1024;
 export const JOB_BODY_BUDGET=256*1024;
 export const UPLOAD_BODY_LIMIT=1024*1024;
+// One swap item (Venice panel + reference) stays near 3 MB so a phone can upload it.
+export const SWAP_ITEM_LIMIT=3*1024*1024;
+export const SWAP_JPEG_QUALITY=0.9;
 
 export function faceFrame(width,height,maxEdge=FACE_MAX_EDGE){
   const w=Math.max(1,Math.round(Number(width)||1));
@@ -116,6 +119,78 @@ function sourceBlob(source){
   const bytes=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
   return new Blob([bytes],{type:mime});
+}
+
+export function maxTargetChars(faceB64='',id='panel'){
+  const shell={type:'swap',id:String(id||'panel'),target_b64:'',face_b64:String(faceB64||'')};
+  return Math.max(0,SWAP_ITEM_LIMIT-jobBodyBytes([shell]));
+}
+
+async function rawBytes(source){
+  if(typeof Blob!=='undefined'&&source instanceof Blob)return new Uint8Array(await source.arrayBuffer());
+  if(typeof source!=='string'||!source)throw localRetry('Could not read the Venice image. Try again.');
+  let raw=source.replace(/\s/g,'');
+  if(source.startsWith('data:')){
+    const comma=source.indexOf(',');
+    if(comma===-1)throw localRetry('Could not read the Venice image. Try again.');
+    raw=source.slice(comma+1).replace(/\s/g,'');
+  }
+  let bin;
+  try{bin=atob(raw);}catch{throw localRetry('Could not read the Venice image. Try again.');}
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToB64(bytes){
+  let bin='';
+  for(let i=0;i<bytes.length;i+=0x4000)bin+=String.fromCharCode(...bytes.subarray(i,i+0x4000));
+  return btoa(bin);
+}
+
+function canvasToJpeg(bitmap,quality,scale){
+  const dw=Math.max(1,Math.round(bitmap.width*scale));
+  const dh=Math.max(1,Math.round(bitmap.height*scale));
+  const canvas=document.createElement('canvas');
+  canvas.width=dw;
+  canvas.height=dh;
+  const ctx=canvas.getContext('2d',{alpha:false})||canvas.getContext('2d');
+  if(!ctx)throw localRetry('Could not compress this panel for your PC. Try again.');
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(0,0,dw,dh);
+  ctx.drawImage(bitmap,0,0,dw,dh);
+  return new Promise((resolve,reject)=>{
+    canvas.toBlob(async blob=>{
+      if(!blob){reject(localRetry('Could not compress this panel for your PC. Try again.'));return;}
+      resolve(new Uint8Array(await blob.arrayBuffer()));
+    },'image/jpeg',quality);
+  });
+}
+
+// Send the Venice image as-is when it already fits. Otherwise JPEG at quality
+// 0.9, then a lower quality or a smaller edge until the swap item is under the limit.
+export async function prepareSwapTarget(source,faceB64='',id='panel'){
+  const maxChars=maxTargetChars(faceB64,id);
+  if(maxChars<32)throw localRetry('That panel is still too large to send to your PC. Try again.');
+  const bytes=await rawBytes(source);
+  const kind=magic(bytes);
+  if((kind==='jpeg'||kind==='png'||kind==='webp')&&bytesToB64(bytes).length<=maxChars)return bytesToB64(bytes);
+  if(!browserReady())throw localRetry('Could not compress this panel for your PC. Try again.');
+  let bitmap;
+  try{bitmap=await createImageBitmap(new Blob([bytes],{type:kind==='png'?'image/png':kind==='webp'?'image/webp':'image/jpeg'}));}
+  catch{throw localRetry('Could not read the Venice image. Try again.');}
+  try{
+    const qualities=[SWAP_JPEG_QUALITY,0.82,0.74,0.66,0.58,0.5];
+    const scales=[1,0.85,0.72,0.6,0.48];
+    for(const scale of scales){
+      for(const quality of qualities){
+        const jpeg=await canvasToJpeg(bitmap,quality,scale);
+        const b64=bytesToB64(jpeg);
+        if(b64.length<=maxChars)return b64;
+      }
+    }
+    throw localRetry('That panel is still too large to send to your PC. Try again.');
+  }finally{try{bitmap.close?.();}catch{/* already closed */}}
 }
 
 export async function prepareFaceReference(source){

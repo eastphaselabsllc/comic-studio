@@ -56,7 +56,7 @@ export function startMockGateway(token='test-local-token',options={}){
   const jobs=new Map();
   const calls=[];
   let seq=0;
-  const control={maxBody:options.maxBody||0,rejectAfter:options.rejectAfter??null};
+  const control={maxBody:options.maxBody||0,rejectAfter:options.rejectAfter??null,faceswap:options.faceswap!==false,swapFail:options.swapFail||null,swapped:options.swapped};
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://127.0.0.1');
     const send=(code,obj)=>{
@@ -94,8 +94,16 @@ export function startMockGateway(token='test-local-token',options={}){
       catch{entry.body=null;}
     }
     calls.push(entry);
-    if(req.method==='GET'&&url.pathname==='/health'){send(200,{ok:true});return;}
+    if(req.method==='GET'&&url.pathname==='/health'){const body={ok:true};if(control.faceswap)body.faceswap=true;send(200,body);return;}
     if((req.headers.authorization||'')!=='Bearer '+token){send(401,{detail:'Unauthorized'});return;}
+    if(req.method==='POST'&&url.pathname==='/faceswap'){
+      const data=entry.body;
+      if(!data||typeof data!=='object'||Array.isArray(data)||!data.target_b64||!data.face_b64||control.swapFail==='noface'){send(422,{detail:'No face found'});return;}
+      const swapped=Number.isFinite(control.swapped)?control.swapped:1;
+      const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      send(200,{image_b64:control.swapImage||png,swapped});
+      return;
+    }
     if(req.method==='POST'&&url.pathname==='/jobs'){
       if(Number.isInteger(control.rejectAfter)&&seq>=control.rejectAfter){send(500,{detail:'Gateway broke'});return;}
       const data=entry.body;
@@ -103,7 +111,7 @@ export function startMockGateway(token='test-local-token',options={}){
       if(!Array.isArray(data.items)||!data.items.length||data.items.length>100||data.items.some(item=>!item||typeof item!=='object')){send(422,{detail:'items'});return;}
       const job_id='job-'+(++seq);
       const now=new Date().toISOString();
-      const job={job_id,status:'queued',created_at:now,updated_at:now,items:data.items.map((item,index)=>({index,id:item.id??null,status:'queued',message:null,_image:null}))};
+      const job={job_id,status:'queued',created_at:now,updated_at:now,items:data.items.map((item,index)=>({index,id:item.id??null,status:'queued',message:null,_image:null,_swap:item.type==='swap',_target:item.target_b64||null,_face:item.face_b64||null}))};
       refresh(job);
       jobs.set(job_id,job);
       send(201,publicJob(job));
@@ -118,6 +126,7 @@ export function startMockGateway(token='test-local-token',options={}){
       if(!item){send(404,{detail:'Unknown item'});return;}
       if(item._reject){send(item._reject.status||422,{detail:item._reject.detail||'No face found'});return;}
       if(item.status!=='done'){send(409,{detail:'Item is '+item.status,status:item.status,index,id:item.id});return;}
+      if(item._swap){const swapped=item._swapped??1;send(200,{images:[item._image],image_b64:item._image,swapped});return;}
       send(200,{images:[item._image]});
       return;
     }
@@ -153,12 +162,13 @@ export function startMockGateway(token='test-local-token',options={}){
         calls,
         jobs,
         control,
-        complete(jobId,index,image){
+        complete(jobId,index,image,extra){
           const job=jobs.get(jobId);
           const item=job.items[index];
           item.status='done';
           item.message=null;
           item._image=image;
+          if(extra&&extra.swapped!=null)item._swapped=extra.swapped;
           refresh(job);
           return publicJob(job);
         },
