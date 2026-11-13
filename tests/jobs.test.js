@@ -25,7 +25,9 @@ function faces(id){return id==='ref-mira'?`data:image/jpeg;base64,${faceA}`:id==
 test('local comic jobs are used only outside demo mode, and the poll slows down', ()=>{
   assert.equal(useLocalJob({demo:true,localURL:'https://pc.example'}), false);
   assert.equal(useLocalJob({demo:false,localURL:''}), false);
-  assert.equal(useLocalJob({demo:false,localURL:'  https://pc.example  '}), true);
+  assert.equal(useLocalJob({demo:false,localURL:'  https://pc.example  '}), false);
+  assert.equal(useLocalJob({demo:false,localURL:'https://pc.example',drawOnPc:true}), true);
+  assert.equal(useLocalJob({demo:true,localURL:'https://pc.example',drawOnPc:true}), false);
   assert.equal(nextPollDelay(0), JOB_POLL_FAST_MS);
   assert.equal(nextPollDelay(29999), JOB_POLL_FAST_MS);
   assert.equal(nextPollDelay(30000), JOB_POLL_SLOW_MS);

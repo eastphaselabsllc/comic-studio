@@ -1,16 +1,22 @@
 // One PC-side comic job. The phone can sleep; polling resumes later and
 // each finished image is stored on the panel it was submitted for.
 import {panelPrompt, panelFocus, appearanceLead, faceFramingLead, explicitRearView, faceVisibleCamera, shotScale, characterForShot, profileListsFaceOrNeckTattoo} from './core.js';
-import {prepareFaceReference, splitJobItems, JOB_BODY_BUDGET} from './face.js';
-import {localFacePayload, localImagePayload, imageNegative, isNoFaceFailure, noFaceFailureMessage} from './provider.js';
+import {prepareFaceReference, prepareSwapTarget, splitJobItems, jobBodyBytes, JOB_BODY_BUDGET, SWAP_ITEM_LIMIT} from './face.js';
+import {localFacePayload, localImagePayload, imageNegative, referenceBase64, isNoFaceFailure, noFaceFailureMessage} from './provider.js';
 
-export {prepareFaceReference, faceFrame, splitJobItems, jobBodyBytes, JOB_BODY_BUDGET, UPLOAD_BODY_LIMIT, FACE_MAX_EDGE, FACE_BYTE_BUDGET} from './face.js';
+export {prepareFaceReference, prepareSwapTarget, faceFrame, splitJobItems, jobBodyBytes, maxTargetChars, JOB_BODY_BUDGET, UPLOAD_BODY_LIMIT, SWAP_ITEM_LIMIT, SWAP_JPEG_QUALITY, FACE_MAX_EDGE, FACE_BYTE_BUDGET} from './face.js';
 
 export const JOB_POLL_FAST_MS=3000;
 export const JOB_POLL_SLOW_MS=9000;
 export const JOB_POLL_FAST_WINDOW_MS=30000;
 
-export function useLocalJob(settings){return !!(settings&&settings.demo!==true&&String(settings.localURL||'').trim());}
+export function useLocalJob(settings){return !!(settings&&settings.demo!==true&&settings.drawOnPc===true&&String(settings.localURL||'').trim());}
+export function canFaceSwap(settings,token){if(!settings||settings.demo===true||settings.drawOnPc===true)return false;if(!String(settings.localURL||'').trim())return false;return !!String(token||'').trim();}
+export function swapSkipReason(panel,characters){const focus=panelFocus(panel,characters||[]);if(!focus.focus)return 'no-character';if(!focus.focus.refId)return 'no-reference';return '';}
+export function describeSwapSkip(panel,characters,{serverOn=false,faceSwap=true}={}){const missing=swapSkipReason(panel,characters);if(missing)return missing;if(!serverOn)return 'server-off';if(faceSwap===false)return 'no-faceswap';return '';}
+const SWAP_LABELS={'no-character':'no character','no-reference':'no reference','server-off':'server off','unswapped':'unswapped'};
+export function panelSourceLabel(panel){if(!panel||typeof panel!=='object')return '';if(panel.engine==='local')return 'PC face match';if(panel.engine==='swapped')return panel.view==='original'?'Venice · original':'Venice + PC face';if(panel.engine==='venice'||panel.swapNote||panel.veniceId){if(panel.swapNote==='no-faceswap')return 'Venice';const reason=SWAP_LABELS[panel.swapNote];if(reason)return `Venice · ${reason}`;if(panel.engine==='venice'||panel.veniceId)return 'Venice';}return '';}
+export function noSwapMessage(){return 'The PC did not find a face to swap. Try again.';}
 
 export function nextPollDelay(elapsedMs){return elapsedMs<JOB_POLL_FAST_WINDOW_MS?JOB_POLL_FAST_MS:JOB_POLL_SLOW_MS;}
 
@@ -19,6 +25,8 @@ export function resolvePanelId(record,item){const echoed=item?.id==null?'':Strin
 export function episodeCharacterPool(characters,episodeCast,panels){const ids=new Set();for(const id of episodeCast||[])if(id)ids.add(String(id));for(const panel of panels||[])for(const id of panel?.cast||[])if(id)ids.add(String(id));return (characters||[]).filter(c=>c&&ids.has(String(c.id)));}
 function castPeople(panel,pool){const byId=new Map((pool||[]).map(c=>[c.id,c]));return (Array.isArray(panel?.cast)?panel.cast:[]).map(id=>byId.get(id)).filter(Boolean);}
 function shownPeople(panel,focus,pool,scale){const named=[focus?.focus,...(focus?.others||[])].filter(Boolean);const source=named.length?named:castPeople(panel,pool);const ordered=[];const seen=new Set();for(const person of source){if(!person||seen.has(person.id))continue;seen.add(person.id);ordered.push(characterForShot(person,scale));}return ordered;}
+export async function buildSwapItems(panels,characters,targetFor,faceFor){const items=[];const panelIds=[];const skipped=[];const faces=new Map();for(const panel of panels||[]){const focus=panelFocus(panel,characters||[]);if(!focus.focus){skipped.push({id:panel.id,reason:'no-character'});continue;}if(!focus.focus.refId){skipped.push({id:panel.id,reason:'no-reference'});continue;}const refId=String(focus.focus.refId);if(!faces.has(refId)){const raw=await faceFor(refId);faces.set(refId,raw?await prepareFaceReference(raw):'');}const face=referenceBase64(faces.get(refId)||'');if(!face){skipped.push({id:panel.id,reason:'no-reference'});continue;}const target=await targetFor(panel);if(!target){skipped.push({id:panel.id,reason:'no-target'});continue;}const target_b64=await prepareSwapTarget(target,face,panel.id);const item={type:'swap',id:panel.id,target_b64,face_b64:face};if(jobBodyBytes([item])>SWAP_ITEM_LIMIT){const err=Error('That panel is still too large to send to your PC. Try again.');err.local=true;err.retryable=true;throw err;}items.push(item);panelIds.push(panel.id);}return {items,panelIds,skipped};}
+
 export async function buildJobItems(panels,characters,style,faceDataFor,opts={}){const items=[];const panelIds=[];const referenceIds=[];const faces=new Map();const pool=(characters||[]).filter(Boolean);for(const panel of panels||[]){if(panel?.imageId)continue;const scene=String(panel?.prompt||'').trim();if(!scene)throw Error('This panel has no scene prompt.');const focus=panelFocus({...panel,prompt:scene},pool);const scale=shotScale(panel?.camera,scene);const script=[scene,panel?.dialogue,panel?.caption].map(part=>String(part||'')).join('\n');const rear=explicitRearView(script);let face='';const refId=focus.focus?.refId?String(focus.focus.refId):'';if(refId){if(!faces.has(refId)){const raw=await faceDataFor(refId);faces.set(refId,raw?await prepareFaceReference(raw):'');}face=faces.get(refId)||'';}const sendFace=!!face;const people=shownPeople(panel,focus,pool,scale);const lead=[appearanceLead(focus.focus?characterForShot(focus.focus,scale):null,(focus.others||[]).map(person=>characterForShot(person,scale))),sendFace&&!rear?faceFramingLead(focus.focus):''].filter(Boolean).join('\n');const camera=sendFace&&!rear?faceVisibleCamera(panel?.camera):panel?.camera;const keepTattoos=scale!=='close'||people.some(person=>String(person?.tattoos||'').trim());const prompt=panelPrompt({style:style||'',camera,scene,characters:people,limit:opts.limit||7500,lead,keepTattoos});const originals=([focus.focus,...(focus.others||[])].filter(Boolean).length?[focus.focus,...(focus.others||[])]:castPeople(panel,pool)).filter(Boolean);const negative=imageNegative(!profileListsFaceOrNeckTattoo(originals));const item=localFacePayload({...localImagePayload(prompt,negative),id:panel.id},face||'');items.push(item);panelIds.push(panel.id);referenceIds.push(item.face_b64?refId:'');}if(!items.length)throw Error('Every panel already has art.');if(items.length>100)throw Error('A comic job can include at most 100 panels.');return {items,panelIds,referenceIds};}
 
 export function normalizeImageJob(record){
@@ -34,7 +42,7 @@ export function normalizeImageJob(record){
   }
   const rest=Array.isArray(record.rest)?record.rest.map(String):[];
   if(!parts.length&&!rest.length)return null;
-  return {parts,rest,startedAt:record.startedAt||Date.now()};
+  return {parts,rest,startedAt:record.startedAt||Date.now(),kind:record.kind==='swap'?'swap':'draw'};
 }
 
 export function hasImageJob(record){const job=normalizeImageJob(record);return !!(job&&(job.parts.length||job.rest.length));}
@@ -51,9 +59,10 @@ function localRetry(message,status){const err=Error(message);err.local=true;err.
 
 export async function driveImageJobs({record,itemFor,createJob,poll,fetchItem,saveItem,deleteJob,cancelJob,shouldCancel,shouldReplace,shouldPause,sleep,now=()=>Date.now(),onProgress,onUpdate,onSubmitted,budget=JOB_BODY_BUDGET}={}){
   if(!record||typeof record!=='object')throw localRetry('Missing comic job. Try again.');
-  const normalized=normalizeImageJob(record)||{parts:[],rest:[],startedAt:Date.now()};
+  const normalized=normalizeImageJob(record)||{parts:[],rest:[],startedAt:Date.now(),kind:record.kind==='swap'?'swap':'draw'};
   record.parts=normalized.parts.map(part=>({...part,fetched:[...part.fetched]}));
   record.rest=normalized.rest.slice();
+  record.kind=normalized.kind||'draw';
   if(!record.startedAt)record.startedAt=normalized.startedAt;
   async function persist(){mirrorJob(record);if(onUpdate)await onUpdate(record);}
   async function cancelAll(){
@@ -153,7 +162,7 @@ export function waitUntilVisible(delay,doc,signal){return new Promise((resolve,r
 function briefWait(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 
 export async function collectGatewayJob({record,poll,fetchItem,saveItem,deleteJob,cancelJob,shouldCancel,shouldReplace,shouldPause,sleep,now=()=>Date.now(),onProgress,onUpdate}){if(!record?.jobId)throw Error('Missing comic job.');const sessionStart=now();const fetched=new Set((record.fetched||[]).map(String));record.fetched=[...fetched];const itemFaults=[];const skipped=new Set();
-  async function pull(status){const items=Array.isArray(status?.items)?status.items:[];for(const item of items){if(item?.status!=='done')continue;const panelId=resolvePanelId(record,item);if(!panelId||fetched.has(panelId)||skipped.has(panelId))continue;let payload;try{payload=await fetchItem(item.index);}catch(e){if(e?.status===409)continue;if(e?.status===422&&isNoFaceFailure(e.detail||e.message)){skipped.add(panelId);if(!itemFaults.some(fault=>fault.panelId===panelId))itemFaults.push({index:item.index,id:item.id,status:'error',message:noFaceFailureMessage(),panelId});continue;}throw e;}const image=payload?.images?.[0];if(!image){const err=Error('The PC finished a panel but sent no image. Try again.');err.local=true;err.retryable=true;throw err;}await saveItem(panelId,image,item);fetched.add(panelId);record.fetched=[...fetched];if(onUpdate)await onUpdate(record);}}
+  async function pull(status){const items=Array.isArray(status?.items)?status.items:[];for(const item of items){if(item?.status!=='done')continue;const panelId=resolvePanelId(record,item);if(!panelId||fetched.has(panelId)||skipped.has(panelId))continue;let payload;try{payload=await fetchItem(item.index);}catch(e){if(e?.status===409)continue;if(e?.status===422&&isNoFaceFailure(e.detail||e.message)){skipped.add(panelId);if(!itemFaults.some(fault=>fault.panelId===panelId))itemFaults.push({index:item.index,id:item.id,status:'error',message:noFaceFailureMessage(),panelId});continue;}throw e;}const image=payload?.images?.[0]||payload?.image_b64;if(!image){const err=Error('The PC finished a panel but sent no image. Try again.');err.local=true;err.retryable=true;throw err;}if(typeof payload?.swapped==='number'&&payload.swapped<1){skipped.add(panelId);if(!itemFaults.some(fault=>fault.panelId===panelId))itemFaults.push({index:item.index,id:item.id,status:'error',message:noSwapMessage(),panelId});continue;}await saveItem(panelId,image,{...item,swapped:payload?.swapped});fetched.add(panelId);record.fetched=[...fetched];if(onUpdate)await onUpdate(record);}}
   function problems(status){const listed=(status?.items||[]).filter(item=>item&&(item.status==='error'||item.status==='cancelled')).map(item=>item.status==='error'&&isNoFaceFailure(item)?{...item,message:noFaceFailureMessage()}:item);const seen=new Set(listed.map(item=>String(item.panelId||item.id||'')));for(const fault of itemFaults){const key=String(fault.panelId||fault.id||'');if(seen.has(key))continue;seen.add(key);listed.push(fault);}return listed;}
   async function removeJob(){try{await deleteJob();}catch(e){if(e?.status!==404)throw e;}}
   async function finish(status){const doneIds=(status?.items||[]).filter(item=>item?.status==='done').map(item=>resolvePanelId(record,item)).filter(Boolean);if(!doneIds.every(id=>fetched.has(String(id))||skipped.has(String(id))))return false;await removeJob();return true;}

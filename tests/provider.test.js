@@ -16,6 +16,7 @@ const script='Mira waits beside the glass.\n\nRowan smiles at the flowers.\n\nNe
 
 test('provider defaults and demo planning do not call the network', async ()=>{
   assert.equal(defaults.panelCount, 45);
+  assert.equal(defaults.drawOnPc, false);
   assert.equal(defaults.textModel, 'most_uncensored');
   assert.match(planInstruction({}), /maximum 36 panels/);
   assert.match(planInstruction({targetPanels:45}), /exactly 45/);
@@ -165,7 +166,7 @@ test('a configured local server does not fall back to Venice when the picture fa
   localStorage.setItem('cs_local_k','local-token');
   const urls=[];
   globalThis.fetch=async url=>{urls.push(String(url));throw new TypeError('Load failed');};
-  const provider=new Provider({...defaults,demo:false,localURL:'https://pc.example',allowCloudFallback:true},async()=>{throw Error('should not ask to switch to Venice');});
+  const provider=new Provider({...defaults,demo:false,localURL:'https://pc.example',drawOnPc:true,allowCloudFallback:true},async()=>{throw Error('should not ask to switch to Venice');});
   await assert.rejects(()=>provider.image('Two fictional adults stand in a garden.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true}),error=>{
     assert.equal(error.local,true);
     assert.equal(error.retryable,true);
@@ -176,4 +177,30 @@ test('a configured local server does not fall back to Venice when the picture fa
   assert.ok(urls.some(url=>url.startsWith('https://pc.example/image/generate')));
   assert.equal(urls.some(url=>/venice\.ai/i.test(url)),false);
   assert.equal(JSON.stringify(urls).includes('venice-key-should-not-be-sent'),false);
+});
+
+test('with the PC draw toggle off, Venice draws and the local server is not asked to generate', async ()=>{
+  localStorage.setItem('cs_k','venice-key');
+  localStorage.setItem('cs_local_k','local-token');
+  const urls=[];
+  let body;
+  let auth;
+  globalThis.fetch=async(url,opts)=>{
+    urls.push(String(url));
+    auth=opts.headers?.Authorization||opts.headers?.authorization||'';
+    body=JSON.parse(opts.body);
+    throw new TypeError('Load failed');
+  };
+  const provider=new Provider({...defaults,demo:false,localURL:'https://pc.example',drawOnPc:false},async()=>{throw Error('an approved image should not ask again');});
+  const negative=imageNegative(true);
+  await assert.rejects(()=>provider.image('Exact character identity, fictional adults, age 18+.\nMira, fictional adult age 32. Hair: dark curls.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true,negative,seed:7}),/connection dropped/);
+  assert.deepEqual(urls,['https://api.venice.ai/api/v1/image/generate']);
+  assert.equal(auth,'Bearer venice-key');
+  assert.equal(body.model,'chroma');
+  assert.equal(body.safe_mode,false);
+  assert.equal(body.seed,7);
+  assert.equal(body.negative_prompt,negative);
+  assert.match(body.negative_prompt,/face tattoo, facial tattoo, neck tattoo, cheek markings/);
+  assert.match(body.prompt,/Exact character identity/);
+  assert.equal(JSON.stringify(urls).includes('local-token'),false);
 });

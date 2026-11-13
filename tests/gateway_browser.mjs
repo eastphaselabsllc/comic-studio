@@ -100,7 +100,7 @@ try{
   await load(`${origin}/`);
   await evalPage(`document.querySelector('[data-nav="settings"]').click()`);
   await delay(150);
-  await evalPage(`(()=>{const demo=document.querySelector('[name=demo]');demo.checked=false;document.querySelector('[name=panelCount]').value='3';document.querySelector('[name=localURL]').value=${JSON.stringify(gw.url)};document.querySelector('[name=localKey]').value='wrong-token';document.querySelector('#settingsForm').requestSubmit();})()`);
+  await evalPage(`(()=>{const demo=document.querySelector('[name=demo]');demo.checked=false;document.querySelector('[name=panelCount]').value='3';document.querySelector('[name=localURL]').value=${JSON.stringify(gw.url)};document.querySelector('[name=localKey]').value='wrong-token';document.querySelector('[name=drawOnPc]').checked=true;document.querySelector('#settingsForm').requestSubmit();})()`);
   await clickText('Enable live mode');
   await delay(200);
   const saved=await evalPage(`document.querySelector('#notice')?.textContent||''`);

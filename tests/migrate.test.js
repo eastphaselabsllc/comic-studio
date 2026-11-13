@@ -30,8 +30,8 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   });
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.7\.0/);
-  assert.doesNotMatch(sw, /comic-studio-v1\.6\.0/);
+  assert.match(sw, /comic-studio-v1\.8\.0/);
+  assert.doesNotMatch(sw, /comic-studio-v1\.7\.0/);
   for(const file of ['batch.js','jobs.js','face.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
     assert.match(sw, new RegExp(file.replace('/','\\/').replace('.','\\.')));
     assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), true);
@@ -66,6 +66,23 @@ test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles'
   const roundPanels=round.series[0].episodes.flatMap(e=>e.pages.flatMap(p=>p.panels));
   assert.equal(roundPanels[0].engine, 'local');
   assert.equal(roundPanels[1].engine, undefined);
+  const swapped=structuredClone(round);
+  const source=swapped.series[0].episodes[0].pages[0].panels[0];
+  source.engine='swapped';
+  source.veniceId='img1';
+  source.swapId='img2';
+  source.swapNote='unswapped';
+  source.view='original';
+  source.swapError='The face swap failed. Try again.';
+  const kept=validateLibrary(swapped);
+  const keptPanel=kept.series[0].episodes[0].pages[0].panels[0];
+  assert.equal(keptPanel.engine,'swapped');
+  assert.equal(keptPanel.veniceId,'img1');
+  assert.equal(keptPanel.swapId,'img2');
+  assert.equal(keptPanel.swapNote,'unswapped');
+  assert.equal(keptPanel.view,'original');
+  assert.match(keptPanel.swapError,/face swap failed/);
+  assert.equal(keptPanel.imageId,'img1');
   const legacy=validateLibrary(v1);
   assert.equal(legacy.schemaVersion, 2);
   assert.equal(legacy.series[0].episodes[0].pages.flatMap(p=>p.panels).length, 45);
