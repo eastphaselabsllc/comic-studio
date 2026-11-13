@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainLocalStatus, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, visionChatBody, readChatStream, IMAGE_NEGATIVE, imageNegative, panelNegative, FACE_TATTOO_NEGATIVE} from '../provider.js';
-import {LOOK_DESCRIBE_INSTRUCTION} from '../look.js';
+import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, readSettings, writeSettings, IMAGE_NEGATIVE} from '../provider.js';
 import {panelPrompt} from '../core.js';
 
 const memory=new Map();
@@ -25,20 +24,12 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   assert.match(IMAGE_NEGATIVE, /speech bubble/);
   assert.match(IMAGE_NEGATIVE, /letters/);
   assert.doesNotMatch(IMAGE_NEGATIVE, /unreadable text/);
-  assert.equal(FACE_TATTOO_NEGATIVE, 'face tattoo, facial tattoo, neck tattoo, cheek markings');
-  assert.match(imageNegative(true), /face tattoo, facial tattoo, neck tattoo, cheek markings/);
-  assert.equal(imageNegative(false), IMAGE_NEGATIVE);
-  assert.equal(explainLocalStatus(422, 'No face found'), 'No face found in this panel. Try again.');
-  assert.match(explainLocalStatus(422, 'items'), /could not accept that comic job/i);
-  assert.doesNotMatch(explainLocalStatus(422, 'No face found'), /Venice/);
   let calls=0;
   globalThis.fetch=()=>{calls++;throw Error('network should not be called');};
   const provider=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
   const planned=await provider.text('plan',{script,cast:[{id:'c1'}],targetPanels:45},characters);
   const count=planned.pages.reduce((n,p)=>n+p.panels.length,0);
-  assert.equal(count, 3);
-  assert.match(planned.pages[0].panels[0].prompt, /Mira waits beside the glass/);
-  assert.doesNotMatch(JSON.stringify(planned), /cinematic moment|Story beat/);
+  assert.equal(count, 45);
   const quick=await provider.text('plan',{script,cast:[{id:'c1'}]},characters);
   const quickCount=quick.pages.reduce((n,p)=>n+p.panels.length,0);
   assert.ok(quickCount>=1&&quickCount<=6);
@@ -116,8 +107,6 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.equal(body.venice_parameters.strip_thinking_response, true);
   assert.equal(body.reasoning_effort, undefined);
   assert.equal(body.venice_parameters.include_venice_system_prompt, true);
-  assert.match(body.messages[0].content, /copied verbatim/);
-  assert.match(body.messages[0].content, /Do not rewrite character appearance/);
 
   globalThis.fetch=async()=>{throw new TypeError('Load failed');};
   await assert.rejects(()=>provider.text('polish', {script:'Hello there friend'}, characters), error=>{
@@ -165,63 +154,18 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.equal(await readChatStream(new Response('data: {"choices":[{"delta":{"content":"A"}}]}\n\ndata: {"choices":[{"delta":{"content":"B"}}]}\n\ndata: [DONE]\n\n', {headers:{'content-type':'text/event-stream'}})), 'AB');
 });
 
-test('a configured local server does not fall back to Venice when the picture fails', async ()=>{
-  localStorage.setItem('cs_k','venice-key-should-not-be-sent');
-  localStorage.setItem('cs_local_k','local-token');
-  const urls=[];
-  globalThis.fetch=async url=>{urls.push(String(url));throw new TypeError('Load failed');};
-  const provider=new Provider({...defaults,demo:false,localURL:'https://pc.example',allowCloudFallback:true},async()=>{throw Error('should not ask to switch to Venice');});
-  await assert.rejects(()=>provider.image('Two fictional adults stand in a garden.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true}),error=>{
-    assert.equal(error.local,true);
-    assert.equal(error.retryable,true);
-    assert.match(error.message,/try again/i);
-    assert.doesNotMatch(error.message,/Venice/);
-    return true;
-  });
-  assert.ok(urls.some(url=>url.startsWith('https://pc.example/image/generate')));
-  assert.equal(urls.some(url=>/venice\.ai/i.test(url)),false);
-  assert.equal(JSON.stringify(urls).includes('venice-key-should-not-be-sent'),false);
-});
-
-test('describing a reference is a tapped vision call and tests never hit Venice', async ()=>{
-  assert.match(LOOK_DESCRIBE_INSTRUCTION, /FRONT view only/);
-  assert.match(LOOK_DESCRIBE_INSTRUCTION, /including the back/);
-  assert.match(planInstruction({}), /verbatim/);
-  const picture='data:image/jpeg;base64,'+'Q'.repeat(32);
-  let calls=0;
-  globalThis.fetch=()=>{calls++;throw Error('network should not be called');};
-  const demo=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
-  const sample=await demo.describeLook([picture], [{id:'j',age:29,fictional:true,name:'Jade'}]);
-  assert.equal(calls, 0);
-  assert.equal(sample.ageLook, 'adult woman');
-  assert.equal(sample.eyeColor, 'hazel-green');
-  assert.match(sample.hairColor, /honey-blonde/);
-  const declined=new Provider({...defaults, demo:false}, async()=>false);
-  localStorage.setItem('cs_k','not-a-real-key');
-  await assert.rejects(()=>declined.describeLook([picture], [{id:'j',age:29,fictional:true,name:'Jade'}]), /Cancelled/);
-  assert.equal(calls, 0);
-  const packed=visionChatBody({model:'default_vision', instruction:LOOK_DESCRIBE_INSTRUCTION, images:[picture], maxTokens:800});
-  assert.equal(packed.stream, true);
-  assert.equal(packed.messages[1].content[0].type, 'text');
-  assert.equal(packed.messages[1].content[1].type, 'image_url');
-  assert.equal(packed.messages[1].content[1].image_url.url, picture);
-  assert.match(packed.messages[0].content, /including the back/);
-  let seen;
-  globalThis.fetch=async(url, opts)=>{
-    calls++;
-    seen=JSON.parse(opts.body);
-    assert.match(String(url), /^https:\/\/api\.venice\.ai\/api\/v1\/chat\/completions$/);
-    const json=JSON.stringify({ageLook:'adult man',eyeColor:'dark brown',hairColor:'dark brown with a few copper highlights',never:['never blonde hair'],tattoos:[{design:'anchor',colors:'black',style:'fine line',size:'small',placement:'back of the right hand'}]});
-    return new Response(`data: ${JSON.stringify({choices:[{delta:{content:json}}]})}\n\ndata: [DONE]\n\n`, {status:200, headers:{'content-type':'text/event-stream'}});
-  };
-  const live=new Provider({...defaults, demo:false}, async()=>true);
-  const filled=await live.describeLook([picture], [{id:'m',age:34,fictional:true,name:'Mark'}]);
-  assert.equal(calls, 1);
-  assert.equal(filled.ageLook, 'adult man');
-  assert.equal(filled.tattoos[0].placement, 'back of the right hand');
-  assert.equal(filled.never[0], 'never blonde hair');
-  assert.equal(seen.messages[1].content[1].image_url.url, picture);
-  assert.match(panelNegative([{look:{never:['never brown hair'],tattoos:[]},description:''}]), /brown hair/);
-  assert.match(panelNegative([{look:{never:[],tattoos:[]}}]), /inconsistent face/);
-  assert.match(panelNegative([{look:{never:[],tattoos:[]}}]), /speech bubble/);
+test('settings writes keep later keys and leave the Venice key untouched', ()=>{
+  localStorage.setItem('cs_settings', JSON.stringify({demo:true,localURL:'https://pc.example',panelCount:45,textModel:'most_uncensored',imageModel:'chroma',allowCloudFallback:false,customLater:true}));
+  localStorage.setItem('cs_k', 'present');
+  const read=readSettings();
+  assert.equal(read.customLater, true);
+  assert.equal(read.localURL, 'https://pc.example');
+  writeSettings({demo:false,localURL:read.localURL,allowCloudFallback:false,textModel:read.textModel,imageModel:read.imageModel,panelCount:12});
+  const again=readSettings();
+  assert.equal(again.demo, false);
+  assert.equal(again.panelCount, 12);
+  assert.equal(again.customLater, true);
+  assert.equal(again.localURL, 'https://pc.example');
+  assert.equal(localStorage.getItem('cs_k'), 'present');
+  localStorage.removeItem('cs_k');
 });

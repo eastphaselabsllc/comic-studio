@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {validateLibrary, migrateLibrary, libraryNeedsMigration, buildEpisodePages, uid} from '../core.js';
+import {validateLibrary, migrateLibrary, libraryNeedsMigration, buildEpisodePages, panelJob, characterSeed, uid} from '../core.js';
 import {DB_VERSION, upgradeDatabase} from '../db.js';
 
 function library(pages, schemaVersion=1){
@@ -30,34 +30,29 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   });
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.9\.0/);
-  assert.doesNotMatch(sw, /comic-studio-v1\.8\.0/);
-  for(const file of ['look.js','batch.js','jobs.js','face.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
+  const dbSource=fs.readFileSync(new URL('../db.js', import.meta.url), 'utf8');
+  assert.match(sw, /comic-studio-v1\.10\.0/);
+  assert.doesNotMatch(sw, /comic-studio-v1\.9\.0/);
+  assert.doesNotMatch(sw, /const CACHE='comic-studio-v1\.4\.0'/);
+  assert.match(dbSource, /indexedDB\.open\(DB_NAME,DB_VERSION\)/);
+  assert.doesNotMatch(upgradeDatabase.toString(), /deleteDatabase/);
+  for(const file of ['batch.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
     assert.match(sw, new RegExp(file.replace('/','\\/').replace('.','\\.')));
     assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), true);
+  }
+  for(const file of ['face.js','jobs.js','look.js']){
+    assert.doesNotMatch(sw, new RegExp(file.replace('.','\\.')));
+    assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), false);
   }
 });
 
 test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles', ()=>{
-  const script=Array.from({length:45},(_,i)=>`Mira waits in the garden, moment ${i+1}.`).join('\n\n');
-  const pages=buildEpisodePages({script,cast:['c1'],count:45,characters:[{id:'c1',name:'Mira Vale',age:32}]});
+  const pages=buildEpisodePages({script:'Mira waits.\n\nRowan smiles.\n\nThe shuttle is gone.',cast:['c1'],count:45});
   pages[0].panels[0].imageId='img1';
   const v1=library(pages.map(page=>({...page,panels:page.panels.map(panel=>{const copy={...panel};delete copy.bubbles;return copy;})})));
   assert.equal(libraryNeedsMigration(v1), true);
   const migrated=migrateLibrary(v1);
   assert.equal(migrated.schemaVersion, 2);
-  assert.equal(migrated.characters[0].description, 'An expressive adult woman with amber eyes.');
-  assert.equal(migrated.characters[0].look.always, 'An expressive adult woman with amber eyes.');
-  assert.equal(migrated.characters[0].hair, 'Dark curls');
-  assert.equal(migrated.characters[0].look.hairColor, 'Dark curls');
-  assert.equal(migrated.characters[0].look.build, 'Athletic adult build');
-  assert.equal(migrated.characters[0].look.outfit, 'Copper jacket');
-  assert.equal(migrated.characters[0].look.tattoos[0].placement, 'A constellation');
-  assert.equal(migrated.characters[0].personality, 'Warm');
-  assert.equal(migrated.characters[0].backstory, 'A cartographer.');
-  assert.equal(migrated.characters[0].refId, 'ref1');
-  assert.equal(Number.isInteger(migrated.characters[0].seed)&&migrated.characters[0].seed>=1, true);
-  assert.equal(typeof migrated.series[0].episodes[0].pages[0].panels[0].scriptExcerpt, 'string');
   assert.equal(migrated.series[0].title, 'After the Last Shuttle');
   assert.equal(migrated.series[0].episodes[0].pages[0].panels[0].imageId, 'img1');
   assert.deepEqual(migrated.characters.map(c=>c.id), ['c1']);
@@ -72,13 +67,6 @@ test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles'
   assert.equal(panels[0].imageId, 'img1');
   assert.equal(panels[0].bubbles[0].text, 'Stay with me');
   assert.equal(panels[0].bubbles[0].preset, 'round-speech');
-  const labeled=structuredClone(saved);
-  labeled.series[0].episodes[0].pages[0].panels[0].engine='local';
-  labeled.series[0].episodes[0].pages[0].panels[1].engine='not-an-engine';
-  const round=validateLibrary(labeled);
-  const roundPanels=round.series[0].episodes.flatMap(e=>e.pages.flatMap(p=>p.panels));
-  assert.equal(roundPanels[0].engine, 'local');
-  assert.equal(roundPanels[1].engine, undefined);
   const legacy=validateLibrary(v1);
   assert.equal(legacy.schemaVersion, 2);
   assert.equal(legacy.series[0].episodes[0].pages.flatMap(p=>p.panels).length, 45);
@@ -87,4 +75,65 @@ test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles'
   bad.series[0].episodes[0].pages[0].panels[0].bubbles=[{...bubble,text:'a child'}];
   assert.throws(()=>validateLibrary(bad), /Adults only|18/);
   assert.equal(libraryNeedsMigration(saved), false);
+});
+
+test('later libraries keep seeds, look sheets, script excerpts, and job records', ()=>{
+  const look={always:'An expressive adult woman with amber eyes.',hairColor:'Dark curls',outfit:'Copper jacket',fixedSeed:true,tattoos:[{design:'constellation',placement:'left forearm'}],never:['different eyes']};
+  const pages=[{id:'p1',layout:'single',panels:[{id:'panel1',cast:['c1'],imageId:'img1',bubblePosition:'top',captionPosition:'bottom',bubbles:[],prompt:'Mira waits in the garden.',camera:'Wide establishing shot',dialogue:'',caption:'',scriptExcerpt:'Mira waits in the garden and watches the shuttle leave.',allowExtras:false,engine:'local',genError:'render failed'}]}];
+  const raw=library(pages, 2);
+  raw.characters[0].look=look;
+  raw.characters[0].seed=424242;
+  raw.characters[0].fixedSeed=true;
+  raw.series[0].episodes[0].imageJob={jobId:'job-old',panelIds:['panel1'],fetched:[],parts:[{jobId:'job-old',panelIds:['panel1'],fetched:[]}],rest:[]};
+  assert.equal(libraryNeedsMigration(raw), false);
+  const saved=validateLibrary(raw);
+  assert.equal(saved.schemaVersion, 2);
+  assert.equal(saved.characters[0].seed, 424242);
+  assert.equal(saved.characters[0].fixedSeed, true);
+  assert.equal(saved.characters[0].description, 'An expressive adult woman with amber eyes.');
+  assert.equal(saved.characters[0].hair, 'Dark curls');
+  assert.equal(saved.characters[0].refId, 'ref1');
+  assert.deepEqual(saved.characters[0].look, look);
+  const panel=saved.series[0].episodes[0].pages[0].panels[0];
+  assert.equal(panel.scriptExcerpt, 'Mira waits in the garden and watches the shuttle leave.');
+  assert.equal(panel.engine, 'local');
+  assert.equal(panel.allowExtras, false);
+  assert.equal(panel.genError, 'render failed');
+  assert.equal(panel.imageId, 'img1');
+  assert.equal(panel.prompt, 'Mira waits in the garden.');
+  assert.equal(saved.series[0].episodes[0].imageJob.jobId, 'job-old');
+  assert.deepEqual(saved.series[0].episodes[0].imageJob.panelIds, ['panel1']);
+  const job=panelJob(panel, saved.characters, saved.series[0].style);
+  assert.equal(job.seed, characterSeed('c1'));
+  assert.doesNotMatch(job.prompt, /Look sheet/);
+  assert.match(job.prompt, /Dark curls/);
+  assert.match(job.prompt, /amber eyes/);
+  const legacy=structuredClone(raw);
+  legacy.schemaVersion=1;
+  delete legacy.series[0].episodes[0].pages[0].panels[0].bubbles;
+  assert.equal(libraryNeedsMigration(legacy), true);
+  const migrated=migrateLibrary(legacy);
+  assert.equal(migrated.characters[0].seed, 424242);
+  assert.equal(migrated.characters[0].look.hairColor, 'Dark curls');
+  assert.equal(migrated.series[0].episodes[0].imageJob.jobId, 'job-old');
+  assert.equal(migrated.series[0].episodes[0].pages[0].panels[0].scriptExcerpt.includes('shuttle'), true);
+  assert.ok(Array.isArray(migrated.series[0].episodes[0].pages[0].panels[0].bubbles));
+  assert.equal(migrated.series[0].title, raw.series[0].title);
+  const lookOnly=structuredClone(saved);
+  lookOnly.characters[0].description='';
+  const kept=validateLibrary(lookOnly);
+  assert.equal(kept.characters[0].description, '');
+  assert.equal(kept.characters[0].look.hairColor, 'Dark curls');
+  assert.equal(kept.characters[0].seed, 424242);
+  const young=structuredClone(lookOnly);
+  young.characters[0].age=15;
+  assert.throws(()=>validateLibrary(young), /18/);
+  const unsafeLook=structuredClone(saved);
+  unsafeLook.characters[0].look={...look,always:'a child'};
+  assert.throws(()=>validateLibrary(unsafeLook), /Adults only|18/);
+  for(const text of ['the child waits','bestiality','non-consensual']){
+    const bad=structuredClone(saved);
+    bad.series[0].episodes[0].pages[0].panels[0].scriptExcerpt=text;
+    assert.throws(()=>validateLibrary(bad), /Adults only|18|not allowed/);
+  }
 });

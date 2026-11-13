@@ -1,4 +1,4 @@
-# Comic Studio v1.9
+# Comic Studio v1.10
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -20,10 +20,10 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 
 - Dark, touch-friendly single-page interface with safe-area padding and 48px controls.
 - Installable manifest, PNG icons, Apple home-screen metadata, and offline service worker. Same-directory/subpath deployment works.
-- Characters: a structured look sheet (face, hair, body, tattoos, piercings, scars, birthmarks, wardrobe, always/never), adult age and fictional-attestation checks, personality, backstory, image upload, turnaround-sheet upload and generation. Describe from reference and Preview character run only when tapped.
+- Characters: appearance description, adult age and fictional-attestation checks, personality, backstory, body/hair/outfit/tattoo presets, image upload, turnaround-sheet upload and generation.
 - Series > episodes, per-series art style, editable scripts and selected cast, AI polish preview/apply/undo.
 - AI-planned pages and editable panel cards: page layout, camera angle, scene prompt, cast, dialogue, captions, lettering position, add/remove panels and pages, regenerate a single panel.
-- **Generate comic** splits the script into sequential panels (one beat each, up to the panel setting, 45 by default and 72 at most) and illustrates them in order, reusing saved character references. You review each prompt and its script excerpt before drawing. With a local image server (and demo mode off) the comic is sent to the PC as one or more small batch jobs, so the phone can lock, switch apps, or close; opening the app again picks up finished panels in script order. Reference faces are scaled down to a face-sized JPEG before they are sent, and a wide turnaround keeps the front view. Without that server, images still run one at a time through Venice. If the local server is set and a send or render fails, the error is shown with Try again and Venice is not used. Each finished panel is labeled PC face match or Venice. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art. New panels are not given speech bubbles, captions, or dialogue lettering.
+- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order through the existing image pipeline, reusing saved character references. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art. New panels are not given speech bubbles, captions, or dialogue lettering.
 - Speech bubbles are added only by hand. Pick a preset, drag it onto the panel, and type. They stay overlays on top of the art in the reader and in a page download. Image requests also tell the model not to draw balloons or words, and quoted speech is removed from the scene text sent to the image model.
 - Page reader with previous/next, horizontal swipe, and keyboard navigation.
 - IndexedDB image blobs and library metadata, debounced autosaving, JSON backup/export and validated atomic restore. Backups contain all referenced art, not connection settings or keys.
@@ -40,20 +40,18 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Text: `POST /chat/completions`, streaming SSE. Default `most_uncensored` trait (currently `venice-uncensored-1-2`). `default_vision` is still offered, but thinking is turned off so a long reply is not silent. Selected character profiles + current script are context; provider system safety stays enabled. Text is checked before and after the API call. A dropped connection says what happened and offers Try again.
 - Images: `POST /image/generate`, default `chroma`, PNG/base64 response, `cfg_scale: 7`, 28 steps, 832×1216, **`safe_mode: false`**.
 - If Chroma returns HTTP 404 (missing model), offers one separately confirmed request using `lustify-sdxl`. It does not auto-retry a timeout, network failure, policy error, or uncertain generation.
-- Reference support is capability-based: only send `style_references` if the selected model advertises `model_spec.supportsStyleReferences`; respect its advertised count. Load models in Settings to discover this. Chroma and Lustify do not accept them. On models that do, a style reference is aesthetic guidance, not face lock. Every panel prompt starts with each present character’s full look-sheet block, copied verbatim and unshortened: hair, eyes, skin, build, tattoos and their placement, and the signature outfit. The scene is what gets shortened if the model’s prompt limit is tight. A likeness seed stored on the character is reused for panels of that cast.
-- Describe from reference: `POST /chat/completions` with an image content part, only after the user taps the button. The vision model is asked to read the face from the front of a turnaround and tattoos from every view, including the back. The result fills the look sheet for review. It is not called on save, on upload, or in tests.
+- Reference support is capability-based: only send `style_references` if the selected model advertises `model_spec.supportsStyleReferences`; respect its advertised count. Load models in Settings to discover this. Chroma and Lustify do not accept them. On models that do, a style reference is aesthetic guidance, not face lock. Every panel prompt starts with a fixed visual identity block (face, hair, body, outfit, tattoos) and reuses a stable seed for that cast. The scene is shortened to the model’s prompt limit before any identity text is cut.
 - No undocumented `face_b64` field is sent to Venice.
 - Every live text/image generation asks before making a potentially paid request; declining prevents it.
 
 ### Optional local image server
 
 - The configured endpoint is always preferred for images. Text continues to use Venice (or demo mocks).
-- `POST {localURL}/image/generate`: `{prompt, width, height, steps, cfg_scale, negative_prompt, face_b64?}`. One panel at a time still uses this path (a single panel, or a reference sheet).
-- **Generate comic**, when a local URL is set and Offline demo is off, sends every unfinished panel with `POST {localURL}/jobs`. Reference photos are turned into a face-sized JPEG first (a wide front/side/back sheet keeps the front view; other references are only scaled down), then the comic is split into several small jobs so each upload stays small enough for iPhone Safari. The job ids are saved on the episode in IndexedDB, in script order. The app polls `GET /jobs/{id}` (every 3 seconds for the first 30 seconds, then every 9 seconds), stores each finished image with `GET /jobs/{id}/items/{index}`, and `DELETE`s a job after those images are on the device. Locking the screen, switching apps, or closing the PWA does not stop the PC once the jobs have been accepted. Coming back, or opening the app again, continues the same jobs and sends any batch that never arrived. Cancel calls `POST /jobs/{id}/cancel` for each one. A failed send shows a plain-language error with Try again and does not switch the pictures to Venice.
-- `face_b64` is still the prepared reference image (a face-sized JPEG; a wide turnaround keeps the front view). The PC gateway detects and crops the face. Each panel sends the reference of its focus character: the character named most often in that panel’s description or dialogue, or the first named when the counts tie, chosen from the episode cast (a unique first name counts). A panel that names nobody omits `face_b64` and still renders on the same server. The prompt leads with the focus character’s look-sheet block, then the other people in the panel, each labeled by name and position when more than one is shown. When a face is sent, the prompt asks for a three-quarter or front view unless the script asks for a view from behind. Close-ups and head-and-shoulders shots keep face, neck, and hand tattoos only. The negative prompt adds each character’s “never” list, generic identity-drift terms, and `face tattoo, facial tattoo, neck tattoo, cheek markings` unless a profile explicitly lists a face or neck tattoo. If one panel comes back as 422 No face found, that panel shows the error with Try again and Venice is not used. Response: `{images: ["<raw base64 png>"]}`; raster data URIs also accepted. Finished panels are labeled **PC face match** or **Venice**.
-- Local token is separate (`cs_local_k`); **Venice’s key is never leaked to a custom host**. It is sent only as `Authorization: Bearer`. A missing PC or a rejected token is explained in plain language and offers Try again.
-- A 660-second client deadline still applies to a single `POST /image/generate`. Batch status checks are short. The PC renders one panel at a time and keeps the job if the phone sleeps.
-- Failure does not silently spend credits. If a local image server is configured and a picture fails, Comic Studio shows the error with Try again and does not send that picture to Venice.
+- `POST {localURL}/image/generate`: `{prompt, width, height, steps, cfg_scale, negative_prompt, face_b64?}`.
+- `face_b64` is the first selected character’s saved raster reference, raw base64. This matches `/workspace/faceapi/server_current.py` and the existing Twin request pattern. Response: `{images: ["<raw base64 png>"]}`; raster data URIs also accepted.
+- Local token is separate (`cs_local_k`); **Venice’s key is never leaked to a custom host**. Server may require its own bearer token.
+- A 660-second client deadline accommodates the server’s up-to-600-second render loop; one render at a time in this app. A timed-out render may still be running remotely.
+- Failure does not silently spend credits. Cloud fallback is disabled by default; when enabled, local failure still asks permission and then confirms the Venice request.
 - URL must be HTTPS (or localhost for box development), without embedded credentials, query, or fragment. For phones use a reachable, authenticated HTTPS tunnel and appropriate CORS. `127.0.0.1` on a phone is the phone, not the PC.
 
 ## Privacy and safety limitations
@@ -63,7 +61,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Client checks enforce adult ages, fictional-character attestation, minor/school-age/age-ambiguous terms, non-consent, and animal-sex terms. Explicit adult content and nudity between consenting fictional adults is allowed. Inputs, generated text, plans, and imported metadata are checked. **These are heuristic client-side guardrails, not tamper-proof moderation or visual age verification.** Uploaded/generated raster art is not automatically content-classified. A production backend needs independent moderation and policy enforcement.
 - Local reference conditioning supports **one face only**. Multi-character consistency and exact tattoo placement are not solved. Turnaround sheets may be weaker FaceID inputs than a clean front portrait.
 - Service worker caches only the app shell, never API requests, credentials, backups, or image blobs. Browser website-data eviction still removes the library; export regularly. Persistent-storage requests may be denied, including on mobile Safari.
-- v1 caps: 100 characters, 100 series, 200 episodes/series, 12 pages/episode, 6 panels/page, 72 panels/episode. **Plan from script** and **Generate comic** use one panel per story beat, up to the Settings panel count (default 45, hard cap 72). A longer script is merged in order so nothing is dropped and nothing is invented. Upload up to 20 MB; raster refs resized to 1536px; backup import limited to 100 MB. Very large libraries need chunked/ZIP backup in a future version.
+- v1 caps: 100 characters, 100 series, 200 episodes/series, 12 pages/episode, 6 panels/page, 72 panels/episode. The quick **Plan pages** action still asks for at most 36 panels. **Generate comic** uses the Settings panel count, default 45. Upload up to 20 MB; raster refs resized to 1536px; backup import limited to 100 MB. Very large libraries need chunked/ZIP backup in a future version.
 - No sync/multiplayer, panel reorder/drag-resize, PDF/CBZ export, advanced lettering placement, or guaranteed character continuity. No actual iPhone/Safari hardware validation yet.
 - User style-reference attachment path in the brief was not present on this executor’s box; no personal style images were embedded. The default style uses the written description.
 
@@ -76,7 +74,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 5. Keep demo mode on until ready; then configure endpoints, save, explicitly load models, and approve each live operation. No paid end-to-end testing has been performed.
 6. Export backup before changing origin/domain; browser data is origin-specific and is not shared with the box preview.
 
-**Runtime files:** `index.html`, `styles.css`, `app.js`, `core.js`, `look.js`, `db.js`, `provider.js`, `batch.js`, `jobs.js`, `face.js`, `bubbles.js`, `bubbles/*.svg`, `manifest.json`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`.
+**Runtime files:** `index.html`, `styles.css`, `app.js`, `core.js`, `db.js`, `provider.js`, `batch.js`, `bubbles.js`, `bubbles/*.svg`, `manifest.json`, `sw.js`, `icon.svg`, `icon-192.png`, `icon-512.png`.
 
 ## Speech bubbles
 
@@ -106,33 +104,10 @@ Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboa
 
 ## Changelog
 
-### v1.9
+### v1.10
 
-- Panels are cut from the episode script in order, one beat at a time. A long script is split so the whole story is still drawn. The planner does not ask Venice to rewrite the plot, and it does not invent extra panels, characters, or scenes to fill a panel count. Each panel keeps the script excerpt it came from.
-- A panel’s cast is only the saved characters named in that excerpt. The image prompt tells the model not to add anyone else, and the negative prompt says the same, unless the excerpt itself calls for other people.
-- Every image prompt includes each present character’s full appearance and look sheet — hair, eyes, skin, build, tattoos and where they sit, and the signature outfit — before the scene. If the prompt is too long for the model, the scene is shortened. The character text is not.
-- Each character stores a likeness seed. A panel reuses a seed derived from the characters in it, so the same people keep the same seed from panel to panel.
-- Before any images are drawn, each panel’s prompt and script excerpt can be edited. Drawing then runs in story order and saves in that order. Service worker cache is `comic-studio-v1.9.0`.
-
-### v1.8
-
-- Each character has a look sheet: face, hair, body, repeatable tattoos, piercings, scars, and birthmarks, plus wardrobe, an always-include line, and a never list. Existing free-text descriptions are copied into always-include. The compiled block is shown in the editor and pasted verbatim into every panel prompt. Script polish is told not to rewrite it.
-- Describe from reference and Preview character are paid Venice calls and run only when tapped. Describe from reference sends the reference image to the vision chat model and fills the sheet for review. Tests mock that call.
-- Close-ups keep face, neck, and hand marks. Two or more characters are labeled by name and side, with the focus character’s block first. A fixed-seed option reuses one seed for that character’s close-ups. If a prompt is past the model limit, wardrobe is dropped first, then non-face tattoos. Hair, eyes, skin, and face stay. Service worker cache is `comic-studio-v1.8.0`.
-
-### v1.7
-
-- Each local comic panel sends the focus character’s reference, or no face when the panel names nobody. The prompt leads with that character’s hair, eyes, skin, tattoos, and body, and with the hair color of anyone else in the panel. A face reference asks for a visible three-quarter or front view unless the script asks for a view from behind.
-- Close-ups and head-and-shoulders shots omit arm, leg, and back tattoo descriptions. The negative prompt adds `face tattoo, facial tattoo, neck tattoo, cheek markings` unless a profile explicitly lists a face or neck tattoo.
-- A per-panel 422 No face found is shown on that panel with Try again and does not fall back to Venice. Service worker cache is `comic-studio-v1.7.0`.
-
-### v1.6
-
-- Comic jobs sent to the local PC shrink each reference to a face-sized JPEG (front view of a wide turnaround) and split the comic into small uploads so iPhone Safari can finish the request. A failed send stays on the error with Try again and does not fall back to Venice. Each panel shows whether the PC face match or Venice made it. Service worker cache is `comic-studio-v1.6.0`.
-
-### v1.5
-
-- Generate comic uses the local gateway’s batch job when a local image server URL is set and Offline demo is off. The job id is stored with the episode, polling resumes after the phone sleeps or the app is closed, and finished panels are saved in script order. Venice is unchanged when no local server is set. Service worker cache is `comic-studio-v1.5.0`.
+- Restores the Venice-only v1.4.0 studio (`c7934ce0498066b5fd97b2c94ec7c496c5120a37`): the same panel planning, identity prompts, and image flow as the first generations. Local PC batch jobs, InstantID face matching, focus-face prompts, look-sheet prompts, and the later story-order planner are not used. Service worker cache is `comic-studio-v1.10.0`.
+- IndexedDB stays at version 2 and opens in place. Characters, series, episodes, panels, settings, and the Venice key already on the device keep loading. Seeds, look sheets, script excerpts, and other fields saved by v1.5–v1.9 stay on the records and are not deleted.
 
 ### v1.4
 
