@@ -109,7 +109,7 @@ test('image prompts lead with identity and keep it when the scene is shortened',
   const mira={id:'a',name:'Mira',age:32,description:'amber eyes and a silver eyebrow piercing',hair:'dark curls in a loose bun',body:'athletic adult build',outfit:'copper flight jacket',tattoos:'CONSTELLATIONTATTOO on the left forearm',personality:'THIS_PERSONALITY_SHOULD_NOT_APPEAR',backstory:'THIS_BACKSTORY_SHOULD_NOT_APPEAR',refId:'ref-a'};
   const rowan={id:'b',name:'Rowan',age:35,description:'green eyes',hair:'short black hair',body:'broad shoulders',outfit:'charcoal coat',tattoos:'leaf on the wrist',refId:'ref-b'};
   const scene=`Garden path. ${'walking further '.repeat(400)}ZEBRAEND`;
-  const prompt=panelPrompt({style:'Ink',camera:'Close-up, three-quarter view',scene,characters:[mira],limit:1200});
+  const prompt=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene,characters:[mira],limit:1200});
   assert.ok(prompt.length<=1200);
   assert.match(prompt, /^Exact character identity/);
   assert.match(prompt, /CONSTELLATIONTATTOO/);
@@ -120,6 +120,10 @@ test('image prompts lead with identity and keep it when the scene is shortened',
   assert.doesNotMatch(prompt, /THIS_PERSONALITY_SHOULD_NOT_APPEAR/);
   assert.doesNotMatch(prompt, /THIS_BACKSTORY_SHOULD_NOT_APPEAR/);
   assert.doesNotMatch(prompt, /ZEBRAEND/);
+  const close=panelPrompt({style:'Ink',camera:'Close-up, three-quarter view',scene:'She smiles.',characters:[mira],limit:7500});
+  assert.doesNotMatch(close, /CONSTELLATIONTATTOO|forearm/);
+  assert.match(close, /dark curls in a loose bun/);
+  assert.match(close, /silver eyebrow piercing/);
   assert.throws(()=>panelPrompt({characters:[{name:'Mira',age:32,description:'x'.repeat(4000)}],limit:500}), /appearance is longer/);
   const job=panelJob({cast:['b','a'],prompt:'Rowan looks back.',camera:'Close-up'}, [mira,rowan], 'Painted light', {limit:7500});
   assert.deepEqual(job.referenceIds, ['ref-b','ref-a']);
@@ -127,7 +131,7 @@ test('image prompts lead with identity and keep it when the scene is shortened',
   assert.equal(job.seed, panelJob({cast:['b','a'],prompt:'Again.',camera:'Wide'}, [mira,rowan], 'Painted light').seed);
   assert.notEqual(job.seed, characterSeed('a'));
   assert.ok(job.seed>=1&&job.seed<=999999999);
-  assert.ok(job.prompt.indexOf('Rowan')<job.prompt.indexOf('Mira'));
+  assert.ok(job.prompt.indexOf('ROWAN')<job.prompt.indexOf('MIRA'));
   assert.ok(job.prompt.startsWith('Exact character identity'));
   const spoken=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:'Mira Vale: "Stay with me tonight." She turns toward the window.',characters:[mira]});
   assert.doesNotMatch(spoken, /Stay with me/);
@@ -147,9 +151,9 @@ test('panel jobs reuse only the selected character references', ()=>{
   ];
   const job=panelJob({cast:['a','c'],prompt:'They share a look.',camera:'Medium shot, eye level'}, chars, 'Painted light');
   assert.deepEqual(job.referenceIds, ['ref-a']);
-  assert.match(job.prompt, /Mira/);
-  assert.match(job.prompt, /No Ref/);
-  assert.doesNotMatch(job.prompt, /Rowan/);
+  assert.match(job.prompt, /MIRA/);
+  assert.match(job.prompt, /NO REF/);
+  assert.doesNotMatch(job.prompt, /ROWAN/);
   assert.match(job.prompt, /No speech bubbles, word balloons, captions, subtitles, letters, or written words/);
   assert.doesNotMatch(job.prompt, /draw a speech|one line per bubble/i);
   assert.match(job.prompt, /fictional adults, age 18\+/);

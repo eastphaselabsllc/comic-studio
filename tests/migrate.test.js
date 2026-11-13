@@ -30,9 +30,9 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   });
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.7\.0/);
-  assert.doesNotMatch(sw, /comic-studio-v1\.6\.0/);
-  for(const file of ['batch.js','jobs.js','face.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
+  assert.match(sw, /comic-studio-v1\.8\.0/);
+  assert.doesNotMatch(sw, /comic-studio-v1\.7\.0/);
+  for(const file of ['look.js','batch.js','jobs.js','face.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
     assert.match(sw, new RegExp(file.replace('/','\\/').replace('.','\\.')));
     assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), true);
   }
@@ -45,6 +45,16 @@ test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles'
   assert.equal(libraryNeedsMigration(v1), true);
   const migrated=migrateLibrary(v1);
   assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.characters[0].description, 'An expressive adult woman with amber eyes.');
+  assert.equal(migrated.characters[0].look.always, 'An expressive adult woman with amber eyes.');
+  assert.equal(migrated.characters[0].hair, 'Dark curls');
+  assert.equal(migrated.characters[0].look.hairColor, 'Dark curls');
+  assert.equal(migrated.characters[0].look.build, 'Athletic adult build');
+  assert.equal(migrated.characters[0].look.outfit, 'Copper jacket');
+  assert.equal(migrated.characters[0].look.tattoos[0].placement, 'A constellation');
+  assert.equal(migrated.characters[0].personality, 'Warm');
+  assert.equal(migrated.characters[0].backstory, 'A cartographer.');
+  assert.equal(migrated.characters[0].refId, 'ref1');
   assert.equal(migrated.series[0].title, 'After the Last Shuttle');
   assert.equal(migrated.series[0].episodes[0].pages[0].panels[0].imageId, 'img1');
   assert.deepEqual(migrated.characters.map(c=>c.id), ['c1']);
