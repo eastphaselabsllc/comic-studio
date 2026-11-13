@@ -36,7 +36,9 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   const provider=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
   const planned=await provider.text('plan',{script,cast:[{id:'c1'}],targetPanels:45},characters);
   const count=planned.pages.reduce((n,p)=>n+p.panels.length,0);
-  assert.equal(count, 45);
+  assert.equal(count, 3);
+  assert.match(planned.pages[0].panels[0].prompt, /Mira waits beside the glass/);
+  assert.doesNotMatch(JSON.stringify(planned), /cinematic moment|Story beat/);
   const quick=await provider.text('plan',{script,cast:[{id:'c1'}]},characters);
   const quickCount=quick.pages.reduce((n,p)=>n+p.panels.length,0);
   assert.ok(quickCount>=1&&quickCount<=6);

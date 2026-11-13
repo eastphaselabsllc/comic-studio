@@ -41,31 +41,39 @@ test('a look sheet compiles to one fixed block and survives migration', ()=>{
   assert.throws(()=>validateCharacter({...jade,age:16,description:'adult woman',fictional:true}), /18/);
 });
 
-test('panel prompts copy the block verbatim, label both sides, and trim wardrobe before face', ()=>{
+test('panel prompts copy the full block verbatim and never trim it to fit', ()=>{
   const block=characterBlock(jade,{scale:'all'});
   const prompt=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:'Jade waits by the glass.',characters:[jade],limit:7500});
   assert.ok(prompt.includes(block));
   assert.match(prompt, /Use each character block verbatim/);
+  assert.match(prompt, /Do not add any other people/);
+  assert.ok(prompt.indexOf(block)<prompt.indexOf('Scene:'));
   assert.doesNotMatch(prompt, /wry|pilot/);
   const pair=panelPrompt({style:'Ink',camera:'Medium shot, eye level',scene:'Close on Mark while Jade waits.',characters:[jade,mark],limit:7500});
   assert.ok(pair.indexOf('MARK (on the left):')<pair.indexOf('JADE (on the right):'));
-  assert.ok(pair.includes(characterBlock(mark,{scale:'mid',position:'on the left'})));
-  assert.ok(pair.includes(characterBlock(jade,{scale:'mid',position:'on the right'})));
+  assert.ok(pair.includes(characterBlock(mark,{scale:'all',position:'on the left'})));
+  assert.ok(pair.includes(characterBlock(jade,{scale:'all',position:'on the right'})));
   const bulky=structuredClone(jade);
   bulky.look=normalizeLook(bulky.look);
   bulky.look.outfit=`WARDROBE ${'x'.repeat(1800)}`;
   bulky.look.tattoos=[...bulky.look.tattoos,{design:'SLEEVE',colors:'black',style:'blackwork',size:'large',placement:'left forearm, inner, wrist to elbow'}];
-  const tight=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:'Jade stands.',characters:[bulky],limit:1400});
-  assert.doesNotMatch(tight, /WARDROBE/);
+  const tight=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:`Jade stands. ${'filler '.repeat(80)}ZEBRAEND`,characters:[bulky],limit:1400});
+  assert.match(tight, /WARDROBE/);
+  assert.match(tight, /SLEEVE/);
+  assert.match(tight, /left forearm, inner, wrist to elbow/);
   assert.match(tight, /honey-blonde hair with platinum highlights/);
   assert.match(tight, /hazel-green almond eyes/);
   assert.match(tight, /warm fair skin/);
   assert.match(tight, /left side of the neck/);
+  assert.doesNotMatch(tight, /ZEBRAEND/);
   const portrait=portraitPrompt(jade,'Ink',7500);
   assert.match(portrait, /head and shoulders/);
-  assert.ok(portrait.includes(characterBlock(jade,{scale:'close'})));
-  assert.equal(panelSeed({cast:['jade','mark'],prompt:'Close-up of Jade.',camera:'Close-up'},[jade,mark]), characterSeed('jade'));
-  assert.equal(panelSeed({cast:['jade','mark'],prompt:'Jade and Mark walk.',camera:'Wide establishing shot'},[jade,mark]), characterSeed('jade|mark'));
+  assert.ok(portrait.includes(characterBlock(jade,{scale:'all'})));
+  const closeSeed=panelSeed({cast:['jade','mark'],prompt:'Close-up of Jade.',camera:'Close-up'},[jade,mark]);
+  const wideSeed=panelSeed({cast:['jade','mark'],prompt:'Jade and Mark walk.',camera:'Wide establishing shot'},[jade,mark]);
+  assert.equal(closeSeed, wideSeed);
+  assert.equal(closeSeed, panelSeed({cast:['mark','jade'],prompt:'Again.',camera:'Low angle'},[mark,jade]));
+  assert.equal(panelSeed({cast:['jade'],prompt:'Jade waits.',camera:'Close-up'},[jade,mark]), jade.seed);
   const negative=panelNegative([jade,mark]);
   assert.match(negative, /brown hair/);
   assert.match(negative, /blonde hair/);
@@ -73,6 +81,8 @@ test('panel prompts copy the block verbatim, label both sides, and trim wardrobe
   assert.match(negative, /inconsistent face/);
   assert.match(negative, /different eye color/);
   assert.doesNotMatch(negative, /neck tattoo/);
+  assert.match(negative, /extra person, additional character/);
+  assert.doesNotMatch(panelNegative([jade,mark],{allowExtras:true}), /extra person/);
   assert.equal(mockLookSheet().eyeColor, 'hazel-green');
   const app=fs.readFileSync(new URL('../app.js', import.meta.url),'utf8');
   assert.equal(app.split('describeLook(').length-1, 1);
