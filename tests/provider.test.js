@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainLocalStatus, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, IMAGE_NEGATIVE, imageNegative, FACE_TATTOO_NEGATIVE} from '../provider.js';
+import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainLocalStatus, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, visionChatBody, readChatStream, IMAGE_NEGATIVE, imageNegative, panelNegative, FACE_TATTOO_NEGATIVE} from '../provider.js';
+import {LOOK_DESCRIBE_INSTRUCTION} from '../look.js';
 import {panelPrompt} from '../core.js';
 
 const memory=new Map();
@@ -113,6 +114,8 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.equal(body.venice_parameters.strip_thinking_response, true);
   assert.equal(body.reasoning_effort, undefined);
   assert.equal(body.venice_parameters.include_venice_system_prompt, true);
+  assert.match(body.messages[0].content, /copied verbatim/);
+  assert.match(body.messages[0].content, /Do not rewrite character appearance/);
 
   globalThis.fetch=async()=>{throw new TypeError('Load failed');};
   await assert.rejects(()=>provider.text('polish', {script:'Hello there friend'}, characters), error=>{
@@ -176,4 +179,47 @@ test('a configured local server does not fall back to Venice when the picture fa
   assert.ok(urls.some(url=>url.startsWith('https://pc.example/image/generate')));
   assert.equal(urls.some(url=>/venice\.ai/i.test(url)),false);
   assert.equal(JSON.stringify(urls).includes('venice-key-should-not-be-sent'),false);
+});
+
+test('describing a reference is a tapped vision call and tests never hit Venice', async ()=>{
+  assert.match(LOOK_DESCRIBE_INSTRUCTION, /FRONT view only/);
+  assert.match(LOOK_DESCRIBE_INSTRUCTION, /including the back/);
+  assert.match(planInstruction({}), /verbatim/);
+  const picture='data:image/jpeg;base64,'+'Q'.repeat(32);
+  let calls=0;
+  globalThis.fetch=()=>{calls++;throw Error('network should not be called');};
+  const demo=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
+  const sample=await demo.describeLook([picture], [{id:'j',age:29,fictional:true,name:'Jade'}]);
+  assert.equal(calls, 0);
+  assert.equal(sample.ageLook, 'adult woman');
+  assert.equal(sample.eyeColor, 'hazel-green');
+  assert.match(sample.hairColor, /honey-blonde/);
+  const declined=new Provider({...defaults, demo:false}, async()=>false);
+  localStorage.setItem('cs_k','not-a-real-key');
+  await assert.rejects(()=>declined.describeLook([picture], [{id:'j',age:29,fictional:true,name:'Jade'}]), /Cancelled/);
+  assert.equal(calls, 0);
+  const packed=visionChatBody({model:'default_vision', instruction:LOOK_DESCRIBE_INSTRUCTION, images:[picture], maxTokens:800});
+  assert.equal(packed.stream, true);
+  assert.equal(packed.messages[1].content[0].type, 'text');
+  assert.equal(packed.messages[1].content[1].type, 'image_url');
+  assert.equal(packed.messages[1].content[1].image_url.url, picture);
+  assert.match(packed.messages[0].content, /including the back/);
+  let seen;
+  globalThis.fetch=async(url, opts)=>{
+    calls++;
+    seen=JSON.parse(opts.body);
+    assert.match(String(url), /^https:\/\/api\.venice\.ai\/api\/v1\/chat\/completions$/);
+    const json=JSON.stringify({ageLook:'adult man',eyeColor:'dark brown',hairColor:'dark brown with a few copper highlights',never:['never blonde hair'],tattoos:[{design:'anchor',colors:'black',style:'fine line',size:'small',placement:'back of the right hand'}]});
+    return new Response(`data: ${JSON.stringify({choices:[{delta:{content:json}}]})}\n\ndata: [DONE]\n\n`, {status:200, headers:{'content-type':'text/event-stream'}});
+  };
+  const live=new Provider({...defaults, demo:false}, async()=>true);
+  const filled=await live.describeLook([picture], [{id:'m',age:34,fictional:true,name:'Mark'}]);
+  assert.equal(calls, 1);
+  assert.equal(filled.ageLook, 'adult man');
+  assert.equal(filled.tattoos[0].placement, 'back of the right hand');
+  assert.equal(filled.never[0], 'never blonde hair');
+  assert.equal(seen.messages[1].content[1].image_url.url, picture);
+  assert.match(panelNegative([{look:{never:['never brown hair'],tattoos:[]},description:''}]), /brown hair/);
+  assert.match(panelNegative([{look:{never:[],tattoos:[]}}]), /inconsistent face/);
+  assert.match(panelNegative([{look:{never:[],tattoos:[]}}]), /speech bubble/);
 });

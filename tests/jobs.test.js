@@ -91,14 +91,15 @@ test('each panel uses its focus character, restates appearance, and keeps body t
   const built=await buildJobItems(stuck,pool,'Ink',faceFor);
   const byId=new Map(built.items.map(item=>[item.id,item]));
   assert.equal(byId.get('p-rowan').face_b64, faceB);
-  assert.match(byId.get('p-rowan').prompt, /Rowan Ash, exact appearance:/);
+  assert.match(byId.get('p-rowan').prompt, /ROWAN ASH:/);
+  assert.doesNotMatch(byId.get('p-rowan').prompt, /on the left/);
   assert.match(byId.get('p-rowan').prompt, /short black hair/);
   assert.match(byId.get('p-rowan').prompt, /green eyes/);
   assert.match(byId.get('p-rowan').prompt, /olive skin/);
   assert.match(byId.get('p-rowan').prompt, /Do not show Rowan Ash from behind/);
   assert.match(byId.get('p-rowan').prompt, /Three-quarter or front view, face visible/);
   assert.doesNotMatch(byId.get('p-rowan').prompt, /Over the shoulder/);
-  assert.ok(byId.get('p-rowan').prompt.indexOf('exact appearance')<byId.get('p-rowan').prompt.indexOf('Scene:'));
+  assert.ok(byId.get('p-rowan').prompt.indexOf('ROWAN ASH:')<byId.get('p-rowan').prompt.indexOf('Scene:'));
   assert.equal(byId.get('p-mira').face_b64, faceA);
   assert.match(byId.get('p-mira').prompt, /warm brown skin/);
   assert.match(byId.get('p-mira').prompt, /amber eyes/);
@@ -107,7 +108,10 @@ test('each panel uses its focus character, restates appearance, and keeps body t
   assert.equal(looked.includes(''), false);
   assert.doesNotMatch(byId.get('p-quiet').prompt, /three-quarter or front view/i);
   assert.equal(byId.get('p-close').face_b64, faceB);
-  assert.match(byId.get('p-close').prompt, /Also in this panel: Mira Vale \(hair dark curls\)/);
+  assert.match(byId.get('p-close').prompt, /ROWAN ASH \(on the left\):/);
+  assert.match(byId.get('p-close').prompt, /MIRA VALE \(on the right\):/);
+  assert.ok(byId.get('p-close').prompt.indexOf('ROWAN ASH')<byId.get('p-close').prompt.indexOf('MIRA VALE'));
+  assert.match(byId.get('p-close').prompt, /dark curls/);
   assert.doesNotMatch(byId.get('p-close').prompt, /forearm|wrist/);
   assert.match(byId.get('p-close').prompt, /short black hair/);
   assert.doesNotMatch(byId.get('p-close').prompt, /, and tattoos/);
@@ -115,7 +119,9 @@ test('each panel uses its focus character, restates appearance, and keeps body t
   assert.doesNotMatch(byId.get('p-rear').prompt, /Do not show/);
   assert.match(byId.get('p-rear').prompt, /Over the shoulder/);
   assert.equal(byId.get('p-tie').face_b64, faceA);
-  assert.match(byId.get('p-tie').prompt, /Rowan Ash \(hair short black hair\)/);
+  assert.match(byId.get('p-tie').prompt, /MIRA VALE \(on the left\):/);
+  assert.match(byId.get('p-tie').prompt, /ROWAN ASH \(on the right\):/);
+  assert.match(byId.get('p-tie').prompt, /short black hair/);
   assert.match(byId.get('p-tie').prompt, /left forearm/);
   assert.equal(byId.get('p-dialogue').face_b64, faceB);
   assert.doesNotMatch(byId.get('p-dialogue').prompt, /wrist|forearm/);
@@ -134,7 +140,7 @@ test('each panel uses its focus character, restates appearance, and keeps body t
   assert.equal(ambiguous.items[0].face_b64, undefined);
   const plain=await buildJobItems([{id:'p-nora',prompt:'Nora waits by the glass.',camera:'Close-up',cast:['c3'],dialogue:'',caption:'',imageId:null}],[nora], 'Ink',()=>{throw Error('a character without a reference is plain generation');});
   assert.equal(plain.items[0].face_b64, undefined);
-  assert.match(plain.items[0].prompt, /Nora/);
+  assert.match(plain.items[0].prompt, /NORA/);
   assert.doesNotMatch(plain.items[0].prompt, /Do not show/);
 });
 
