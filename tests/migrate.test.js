@@ -30,8 +30,8 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   });
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.8\.0/);
-  assert.doesNotMatch(sw, /comic-studio-v1\.7\.0/);
+  assert.match(sw, /comic-studio-v1\.9\.0/);
+  assert.doesNotMatch(sw, /comic-studio-v1\.8\.0/);
   for(const file of ['look.js','batch.js','jobs.js','face.js','bubbles.js','bubbles/round-speech.svg','bubbles/thought-cloud.svg','bubbles/shout-burst.svg','bubbles/whisper-dashed.svg','bubbles/caption-box.svg']){
     assert.match(sw, new RegExp(file.replace('/','\\/').replace('.','\\.')));
     assert.equal(fs.existsSync(new URL('../'+file, import.meta.url)), true);
@@ -39,7 +39,8 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
 });
 
 test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles', ()=>{
-  const pages=buildEpisodePages({script:'Mira waits.\n\nRowan smiles.\n\nThe shuttle is gone.',cast:['c1'],count:45});
+  const script=Array.from({length:45},(_,i)=>`Mira waits in the garden, moment ${i+1}.`).join('\n\n');
+  const pages=buildEpisodePages({script,cast:['c1'],count:45,characters:[{id:'c1',name:'Mira Vale',age:32}]});
   pages[0].panels[0].imageId='img1';
   const v1=library(pages.map(page=>({...page,panels:page.panels.map(panel=>{const copy={...panel};delete copy.bubbles;return copy;})})));
   assert.equal(libraryNeedsMigration(v1), true);
@@ -55,6 +56,8 @@ test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles'
   assert.equal(migrated.characters[0].personality, 'Warm');
   assert.equal(migrated.characters[0].backstory, 'A cartographer.');
   assert.equal(migrated.characters[0].refId, 'ref1');
+  assert.equal(Number.isInteger(migrated.characters[0].seed)&&migrated.characters[0].seed>=1, true);
+  assert.equal(typeof migrated.series[0].episodes[0].pages[0].panels[0].scriptExcerpt, 'string');
   assert.equal(migrated.series[0].title, 'After the Last Shuttle');
   assert.equal(migrated.series[0].episodes[0].pages[0].panels[0].imageId, 'img1');
   assert.deepEqual(migrated.characters.map(c=>c.id), ['c1']);

@@ -70,7 +70,7 @@ test('job items stay in script order and use the face of the person named in tha
   assert.match(quietJob.items[0].negative_prompt, /face tattoo, facial tattoo, neck tattoo, cheek markings/);
 });
 
-test('each panel uses its focus character, restates appearance, and keeps body tattoos off close-ups', async ()=>{
+test('each panel uses its focus character and restates the full appearance, including tattoos', async ()=>{
   const miraVale={...mira,name:'Mira Vale',description:'An adult woman with warm brown skin, amber eyes, and a silver piercing.',tattoos:'Fine geometric constellation on the left forearm'};
   const rowanAsh={...rowan,name:'Rowan Ash',description:'An adult man with olive skin and green eyes.',tattoos:'a leaf on the right wrist'};
   const cheek={...mira,id:'c4',name:'Nia Cole',refId:'ref-nia',description:'amber eyes',tattoos:'a small star tattoo on the left cheek',hair:'auburn waves'};
@@ -112,9 +112,10 @@ test('each panel uses its focus character, restates appearance, and keeps body t
   assert.match(byId.get('p-close').prompt, /MIRA VALE \(on the right\):/);
   assert.ok(byId.get('p-close').prompt.indexOf('ROWAN ASH')<byId.get('p-close').prompt.indexOf('MIRA VALE'));
   assert.match(byId.get('p-close').prompt, /dark curls/);
-  assert.doesNotMatch(byId.get('p-close').prompt, /forearm|wrist/);
+  assert.match(byId.get('p-close').prompt, /left forearm/);
+  assert.match(byId.get('p-close').prompt, /right wrist/);
   assert.match(byId.get('p-close').prompt, /short black hair/);
-  assert.doesNotMatch(byId.get('p-close').prompt, /, and tattoos/);
+  assert.match(byId.get('p-close').prompt, /Only these characters may appear/);
   assert.match(byId.get('p-rear').prompt, /from behind/);
   assert.doesNotMatch(byId.get('p-rear').prompt, /Do not show/);
   assert.match(byId.get('p-rear').prompt, /Over the shoulder/);
@@ -124,7 +125,7 @@ test('each panel uses its focus character, restates appearance, and keeps body t
   assert.match(byId.get('p-tie').prompt, /short black hair/);
   assert.match(byId.get('p-tie').prompt, /left forearm/);
   assert.equal(byId.get('p-dialogue').face_b64, faceB);
-  assert.doesNotMatch(byId.get('p-dialogue').prompt, /wrist|forearm/);
+  assert.match(byId.get('p-dialogue').prompt, /right wrist/);
   assert.equal(byId.get('p-count').face_b64, faceB);
   for(const item of built.items){
     if(item.id==='p-cheek')continue;
