@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, readSettings, writeSettings, IMAGE_NEGATIVE} from '../provider.js';
+import {Provider, defaults, planInstruction, isCancelled, explainRequestError, explainHttpStatus, imagePromptLimit, localFacePayload, veniceImageBody, readChatStream, readSettings, writeSettings, IMAGE_NEGATIVE, SHEET_NEGATIVE} from '../provider.js';
 import {panelPrompt} from '../core.js';
 
 const memory=new Map();
@@ -24,6 +24,10 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   assert.match(IMAGE_NEGATIVE, /speech bubble/);
   assert.match(IMAGE_NEGATIVE, /letters/);
   assert.doesNotMatch(IMAGE_NEGATIVE, /unreadable text/);
+  for(const term of ['character lineup','reference sheet','turnaround','character sheet','multiple views','model sheet','grid','collage','split panel','plain white background','blank background','standing in a row','duplicate person'])assert.match(IMAGE_NEGATIVE, new RegExp(term));
+  assert.match(SHEET_NEGATIVE, /speech bubble/);
+  assert.doesNotMatch(SHEET_NEGATIVE, /turnaround/);
+  assert.doesNotMatch(SHEET_NEGATIVE, /character lineup/);
   let calls=0;
   globalThis.fetch=()=>{calls++;throw Error('network should not be called');};
   const provider=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
@@ -149,8 +153,10 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.equal(seen[0].safe_mode, false);
   assert.equal(seen[0].model, 'chroma');
   assert.equal(seen[0].style_references, undefined);
-  assert.match(seen[0].prompt, /Exact character identity/);
+  assert.match(seen[0].prompt, /A single cinematic comic book panel in stylized 3D/);
   assert.match(seen[0].prompt, /dark curls/);
+  assert.match(seen[0].negative_prompt, /character lineup/);
+  assert.match(seen[0].negative_prompt, /plain white background/);
   assert.equal(await readChatStream(new Response('data: {"choices":[{"delta":{"content":"A"}}]}\n\ndata: {"choices":[{"delta":{"content":"B"}}]}\n\ndata: [DONE]\n\n', {headers:{'content-type':'text/event-stream'}})), 'AB');
 });
 
