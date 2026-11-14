@@ -33,7 +33,9 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   const provider=new Provider({...defaults, demo:true}, async()=>{throw Error('demo should not ask');});
   const planned=await provider.text('plan',{script,cast:[{id:'c1'}],targetPanels:45},characters);
   const count=planned.pages.reduce((n,p)=>n+p.panels.length,0);
-  assert.equal(count, 45);
+  assert.equal(count, 3);
+  assert.match(planned.pages[0].panels[0].prompt, /Mira waits beside the glass/);
+  assert.doesNotMatch(JSON.stringify(planned), /Story beat/);
   const quick=await provider.text('plan',{script,cast:[{id:'c1'}]},characters);
   const quickCount=quick.pages.reduce((n,p)=>n+p.panels.length,0);
   assert.ok(quickCount>=1&&quickCount<=6);
@@ -153,7 +155,8 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.equal(seen[0].safe_mode, false);
   assert.equal(seen[0].model, 'chroma');
   assert.equal(seen[0].style_references, undefined);
-  assert.match(seen[0].prompt, /A single cinematic comic book panel in stylized 3D/);
+  assert.match(seen[0].prompt, /A cinematic 3D animated film still, stylized Pixar-like characters/);
+  assert.doesNotMatch(seen[0].prompt, /\bcomic\b|lettering|speech bubble|word balloon/i);
   assert.match(seen[0].prompt, /dark curls/);
   assert.match(seen[0].negative_prompt, /character lineup/);
   assert.match(seen[0].negative_prompt, /plain white background/);
@@ -172,6 +175,8 @@ test('settings writes keep later keys and leave the Venice key untouched', ()=>{
   assert.equal(again.panelCount, 12);
   assert.equal(again.customLater, true);
   assert.equal(again.localURL, 'https://pc.example');
+  assert.equal(again.likenessMode, false);
+  assert.equal(again.likenessModel, 'qwen-edit-uncensored');
   assert.equal(localStorage.getItem('cs_k'), 'present');
   localStorage.removeItem('cs_k');
 });
