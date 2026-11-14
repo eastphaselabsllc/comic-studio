@@ -14,52 +14,50 @@ test('panel count defaults to 45 and clamps into the episode limit', ()=>{
   assert.equal(clampPanelCount(80), 72);
 });
 
-test('a script becomes exactly 45 ordered beats and pages', ()=>{
-  const beats=splitScriptIntoBeats(script, 45);
-  assert.equal(beats.length, 45);
-  assert.ok(beats.every(b=>b.prompt.trim()&&b.camera));
+test('a script keeps every sentence in order and does not invent panels', ()=>{
+  const beats=splitScriptIntoBeats(script);
+  assert.equal(beats.length, 40);
+  assert.ok(beats.every(b=>b.camera));
   const blob=beats.map(b=>b.prompt).join('\n');
-  let last=0;
+  let last=-1;
   for(let i=1;i<=20;i++){
     const at=blob.indexOf(`Scene ${i}`);
-    assert.ok(at>=last, `scene ${i} missing or out of order`);
+    assert.ok(at>last, `scene ${i} missing or out of order`);
     last=at;
   }
-  const pages=buildEpisodePages({script, cast:['c1','c2'], count:45});
+  assert.doesNotMatch(blob, /Story beat/);
+  const pages=buildEpisodePages({script, cast:['c1','c2'], characters:[{id:'c1',name:'Mira'},{id:'c2',name:'Rowan'}]});
   const panels=pages.flatMap(p=>p.panels);
-  assert.equal(panels.length, 45);
-  assert.equal(pages.length, 8);
+  assert.equal(panels.length, 40);
+  assert.equal(pages.length, 7);
   assert.equal(pages[0].layout, 'hero');
-  assert.equal(pages.at(-1).panels.length, 3);
+  assert.equal(pages.at(-1).panels.length, 4);
   assert.ok(pages.every(p=>p.panels.length<=6&&p.panels.length>=1));
-  assert.ok(panels.every(p=>p.cast.includes('c1')&&Array.isArray(p.bubbles)&&p.imageId===null));
+  assert.ok(panels.every(p=>Array.isArray(p.bubbles)&&p.imageId===null));
 });
 
-test('short scripts still fill the requested panel count', ()=>{
-  const beats=splitScriptIntoBeats('Mira waits in the garden.', 45);
-  assert.equal(beats.length, 45);
-  assert.ok(beats.every(b=>/Mira waits/.test(b.prompt)));
+test('a short script stays one panel', ()=>{
+  const beats=splitScriptIntoBeats('Mira waits in the garden.');
+  assert.equal(beats.length, 1);
+  assert.match(beats[0].prompt, /Mira waits in the garden/);
 });
 
-test('quick plan stays capped at 36 while a full comic can use a short AI plan as hints', ()=>{
+test('an optional plan cannot replace her scene text', ()=>{
   const raw={pages:Array.from({length:10},()=>({layout:'two',panels:Array.from({length:4},()=>({prompt:'An adult waits.',camera:'Wide shot',dialogue:'',caption:'',cast:['c1']}))}))};
   assert.equal(PLAN_MAX_PANELS, 36);
   assert.throws(()=>normalizePlan(raw,['c1']), /36/);
   const pages=buildEpisodePages({
     script,
     cast:['c1'],
-    count:45,
+    characters:[{id:'c1',name:'Mira'}],
     plan:{pages:[{layout:'two',panels:[{prompt:'Amber light through the glass canopy.',camera:'Low angle',dialogue:'Mira: Stay.',caption:'',cast:['nope','c1']}]}]}
   });
   const panels=pages.flatMap(p=>p.panels);
-  assert.equal(panels.length, 45);
-  assert.match(panels[0].prompt, /Amber light/);
+  assert.equal(panels.length, 40);
+  assert.doesNotMatch(panels[0].prompt, /Amber light|Stay/);
+  assert.match(panels[0].prompt, /Scene 1/);
   assert.equal(panels[0].dialogue, '');
   assert.equal(panels[0].caption, '');
-  assert.equal(panels[0].bubbles.length, 0);
-  assert.equal(panels[0].camera, 'Low angle');
-  assert.deepEqual(panels[0].cast, ['c1']);
-  assert.match(panels[10].prompt, /garden|Mira|Rowan|Scene|fictional/);
 });
 
 test('disallowed model text is dropped and a disallowed script still fails', ()=>{
@@ -92,7 +90,8 @@ test('generate comic keeps script order and the cast named in each panel', ()=>{
   });
   const panels=pages.flatMap(p=>p.panels);
   assert.equal(panels.length, 4);
-  assert.match(panels[0].prompt, /stranger/);
+  assert.match(panels[0].prompt, /Mira opens the kitchen door/);
+  assert.doesNotMatch(panels.map(p=>p.prompt).join('\n'), /stranger|A stranger/);
   assert.deepEqual(panels[0].cast, ['c1']);
   assert.match(panels[1].prompt, /quiet/);
   assert.deepEqual(panels[1].cast, ['c1','c2']);
@@ -111,7 +110,8 @@ test('image prompts lead with the scene and shorten only an extremely long scene
   const scene=`Garden path. ${'walking further '.repeat(400)}ZEBRAEND`;
   const prompt=panelPrompt({style:'Ink',camera:'Close-up, three-quarter view',scene,characters:[mira],limit:1200});
   assert.ok(prompt.length<=1200);
-  assert.match(prompt, /^A single cinematic comic book panel in stylized 3D, Pixar-like faces, hyper-real skin/);
+  assert.match(prompt, /^A cinematic 3D animated film still, stylized Pixar-like characters, hyper-real skin/);
+  assert.doesNotMatch(prompt, /\bcomic\b|lettering|speech bubble|word balloon/i);
   assert.match(prompt, /Camera: Close-up, three-quarter view/);
   assert.match(prompt, /Scene: Garden path/);
   assert.ok(prompt.indexOf('Scene:')<prompt.indexOf('Characters,'));
@@ -146,20 +146,63 @@ test('image prompts lead with the scene and shorten only an extremely long scene
   assert.notEqual(job.seed, characterSeed('a'));
   assert.ok(job.seed>=1&&job.seed<=999999999);
   assert.ok(job.prompt.indexOf('Rowan')<job.prompt.indexOf('Mira'));
-  assert.match(job.prompt, /^A single cinematic comic book panel/);
+  assert.match(job.prompt, /^A cinematic 3D animated film still/);
+  assert.doesNotMatch(job.prompt, /\bcomic\b|lettering|speech bubble/i);
   const onlyRowan=panelJob({cast:['b','a'],prompt:'Rowan looks back.',camera:'Close-up'}, [mira,rowan], 'Painted light');
   assert.deepEqual(onlyRowan.referenceIds, ['ref-b']);
   assert.equal(onlyRowan.seed, characterSeed('b'));
   assert.match(onlyRowan.prompt, /Rowan/);
   assert.doesNotMatch(onlyRowan.prompt, /Mira/);
-  const spoken=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:'Mira Vale: "Stay with me tonight." She turns toward the window.',characters:[mira]});
-  assert.doesNotMatch(spoken, /Stay with me/);
+  const spoken=panelPrompt({style:'Ink',camera:'Wide establishing shot',scene:'Mira Vale: "Stay with me tonight." She says "Wait." She asks if he is coming. She turns toward the window.',characters:[mira]});
+  assert.doesNotMatch(spoken, /Stay with me|Wait|says|asks/);
   assert.match(spoken, /turns toward the window/);
-  assert.match(spoken, /No speech bubbles/);
+  assert.doesNotMatch(spoken, /speech bubble|word balloon|\bcomic\b|lettering/i);
+  assert.match(spoken, /cinematic 3D animated film still/);
   assert.equal(visualScene('Mira: Stay with me.\nShe waits by the glass.'), 'She waits by the glass.');
-  const pagesFromSpeech=buildEpisodePages({script:'Mira: Stay with me tonight.\n\nShe turns toward the window.',cast:['a'],count:2,characters:[mira]});
-  assert.ok(pagesFromSpeech.flatMap(p=>p.panels).every(p=>p.dialogue===''&&p.caption===''&&p.bubbles.length===0));
-  assert.doesNotMatch(pagesFromSpeech.flatMap(p=>p.panels).map(p=>p.prompt).join('\n'), /Stay with me/);
+  assert.equal(visualScene('She says "Stay with me tonight." She turns toward the window.'), 'She turns toward the window.');
+  const pagesFromSpeech=buildEpisodePages({script:'Mira: Stay with me tonight.\n\nShe turns toward the window.',cast:['a'],characters:[mira]});
+  const speechPanels=pagesFromSpeech.flatMap(p=>p.panels);
+  assert.equal(speechPanels.length, 2);
+  assert.equal(speechPanels[0].bubbles[0].text, 'Stay with me tonight.');
+  assert.equal(speechPanels[0].bubbles[0].preset, 'round-speech');
+  assert.equal(speechPanels[1].bubbles.length, 0);
+  assert.doesNotMatch(speechPanels.map(p=>p.prompt).join('\n'), /Stay with me/);
+  assert.match(speechPanels[1].prompt, /turns toward the window/);
+});
+
+test('five beats stay five panels in her order', ()=>{
+  const five=[
+    'Mira opens the kitchen door.',
+    'The kitchen is quiet.',
+    'Rowan stands outside with the keys.',
+    'Mira hands Rowan the box.',
+    'They sit down together.'
+  ];
+  const pages=buildEpisodePages({script:five.join('\n\n'),cast:['a','b'],characters:[{id:'a',name:'Mira'},{id:'b',name:'Rowan'}]});
+  const panels=pages.flatMap(p=>p.panels);
+  assert.equal(panels.length, 5);
+  five.forEach((line,i)=>assert.equal(panels[i].prompt, line));
+  assert.deepEqual(panels[0].cast, ['a']);
+  assert.deepEqual(panels[1].cast, ['a','b']);
+  assert.deepEqual(panels[2].cast, ['b']);
+  assert.deepEqual(panels[4].cast, ['a','b']);
+});
+
+test('an unselected library character never enters a panel prompt or reference list', ()=>{
+  const mira={id:'mira',name:'Mira',age:32,description:'amber eyes',hair:'dark curls',body:'athletic',outfit:'jacket',tattoos:'constellation',refId:'ref-mira',portraitId:'port-mira'};
+  const luna={id:'luna',name:'Luna',age:34,description:'UNSELECTEDTOKEN violet eyes',hair:'silver bob',body:'tall',outfit:'coat',tattoos:'UNSELECTEDMARK',refId:'ref-luna',portraitId:'port-luna'};
+  const pages=buildEpisodePages({
+    script:'Mira opens the door.\n\nThe kitchen is quiet.',
+    cast:['mira'],
+    characters:[mira,luna]
+  });
+  const panels=pages.flatMap(p=>p.panels);
+  for(const panel of panels){
+    const job=panelJob(panel, [mira,luna], 'Painted light');
+    const blob=`${job.prompt}\n${job.referenceIds.join(',')}\n${job.portraitIds.join(',')}\n${job.characters.map(c=>c.id).join(',')}`;
+    assert.doesNotMatch(blob, /Luna|UNSELECTEDTOKEN|UNSELECTEDMARK|ref-luna|port-luna/);
+    assert.deepEqual(panel.cast, ['mira']);
+  }
 });
 
 test('Jade’s door scene stays whole and ahead of a long look sheet', ()=>{
@@ -171,7 +214,8 @@ test('Jade’s door scene stays whole and ahead of a long look sheet', ()=>{
   const job=panelJob({cast:['jade','mark','sam'],prompt:scene,camera:'over-the-shoulder shot'}, [jade,mark,sam], 'Stylized 3D toon faces, expressive adult proportions, hyper-realistic skin textures, cinematic lighting, intricate tattoo detail, polished animated-feature rendering.', {limit:7500});
   const prompt=job.prompt;
   assert.ok(prompt.length<=7500);
-  assert.match(prompt, /^A single cinematic comic book panel in stylized 3D, Pixar-like faces, hyper-real skin/);
+  assert.match(prompt, /^A cinematic 3D animated film still, stylized Pixar-like characters, hyper-real skin/);
+  assert.doesNotMatch(prompt, /\bcomic\b|lettering|speech bubble|word balloon/i);
   assert.ok(prompt.includes(scene));
   const sceneAt=prompt.indexOf(scene);
   assert.ok(sceneAt>0&&sceneAt<400);
@@ -214,7 +258,7 @@ test('panel jobs reuse only the selected character references', ()=>{
   assert.match(job.prompt, /Mira/);
   assert.match(job.prompt, /No Ref/);
   assert.doesNotMatch(job.prompt, /Rowan/);
-  assert.match(job.prompt, /No speech bubbles, word balloons, captions, subtitles, letters, or written words/);
+  assert.doesNotMatch(job.prompt, /speech bubble|word balloon|\bcomic\b|lettering/i);
   assert.doesNotMatch(job.prompt, /draw a speech|one line per bubble/i);
   assert.match(job.prompt, /fictional adults, age 18\+/);
 });

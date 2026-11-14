@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {validateLibrary, migrateLibrary, libraryNeedsMigration, buildEpisodePages, panelJob, characterSeed, uid} from '../core.js';
+import {validateLibrary, migrateLibrary, libraryNeedsMigration, buildEpisodePages, panelJob, characterSeed, uid, newPanel, assetIds} from '../core.js';
 import {DB_VERSION, upgradeDatabase} from '../db.js';
 
 function library(pages, schemaVersion=1){
@@ -31,7 +31,7 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   const dbSource=fs.readFileSync(new URL('../db.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.11\.0/);
+  assert.match(sw, /comic-studio-v1\.12\.0/);
   assert.doesNotMatch(sw, /comic-studio-v1\.9\.0/);
   assert.doesNotMatch(sw, /const CACHE='comic-studio-v1\.4\.0'/);
   assert.match(dbSource, /indexedDB\.open\(DB_NAME,DB_VERSION\)/);
@@ -47,7 +47,8 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
 });
 
 test('v1 stories migrate in place and a 45-panel comic round-trips with bubbles', ()=>{
-  const pages=buildEpisodePages({script:'Mira waits.\n\nRowan smiles.\n\nThe shuttle is gone.',cast:['c1'],count:45});
+  const made=Array.from({length:45},(_,i)=>Object.assign(newPanel(['c1']),{prompt:`Mira waits in the garden, moment ${i+1}.`,camera:'Wide establishing shot'}));
+  const pages=[];for(let i=0;i<made.length;i+=6){const slice=made.slice(i,i+6);pages.push({id:uid(),layout:slice.length===1?'single':'two',panels:slice});}
   pages[0].panels[0].imageId='img1';
   const v1=library(pages.map(page=>({...page,panels:page.panels.map(panel=>{const copy={...panel};delete copy.bubbles;return copy;})})));
   assert.equal(libraryNeedsMigration(v1), true);
@@ -93,6 +94,13 @@ test('later libraries keep seeds, look sheets, script excerpts, and job records'
   assert.equal(saved.characters[0].description, 'An expressive adult woman with amber eyes.');
   assert.equal(saved.characters[0].hair, 'Dark curls');
   assert.equal(saved.characters[0].refId, 'ref1');
+  raw.characters[0].portraitId='port1';
+  const withPortrait=validateLibrary(raw);
+  assert.equal(withPortrait.characters[0].portraitId, 'port1');
+  assert.equal(withPortrait.characters[0].refId, 'ref1');
+  assert.equal(withPortrait.characters[0].seed, 424242);
+  assert.ok(assetIds(withPortrait).includes('port1'));
+  assert.ok(assetIds(withPortrait).includes('ref1'));
   assert.deepEqual(saved.characters[0].look, look);
   const panel=saved.series[0].episodes[0].pages[0].panels[0];
   assert.equal(panel.scriptExcerpt, 'Mira waits in the garden and watches the shuttle leave.');

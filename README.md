@@ -1,4 +1,4 @@
-# Comic Studio v1.11
+# Comic Studio v1.12
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -23,7 +23,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Characters: appearance description, adult age and fictional-attestation checks, personality, backstory, body/hair/outfit/tattoo presets, image upload, turnaround-sheet upload and generation.
 - Series > episodes, per-series art style, editable scripts and selected cast, AI polish preview/apply/undo.
 - AI-planned pages and editable panel cards: page layout, camera angle, scene prompt, cast, dialogue, captions, lettering position, add/remove panels and pages, regenerate a single panel.
-- **Generate comic** splits the script into a configurable number of panels (45 by default, up to 72) and illustrates them in order through the existing image pipeline, reusing saved character references. Progress shows `12/45`. Cancel keeps finished panels; Resume retries only the ones without art. New panels are not given speech bubbles, captions, or dialogue lettering.
+- **Generate comic** turns the script into panels in reading order, one panel per sentence, with no invented beats. Only characters checked for the episode are drawn. Dialogue from the script is lettered by the app on top of the art. Cancel keeps finished panels; Resume retries only the ones without art.
 - Speech bubbles are added only by hand. Pick a preset, drag it onto the panel, and type. They stay overlays on top of the art in the reader and in a page download. Image requests also tell the model not to draw balloons or words, and quoted speech is removed from the scene text sent to the image model.
 - Page reader with previous/next, horizontal swipe, and keyboard navigation.
 - IndexedDB image blobs and library metadata, debounced autosaving, JSON backup/export and validated atomic restore. Backups contain all referenced art, not connection settings or keys.
@@ -103,6 +103,12 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.12
+
+- Generate comic follows the script in reading order, one panel per sentence. It does not ask Venice to rewrite the story, and it does not pad or merge beats to a fixed panel count. Only characters checked for the episode are drawn; a beat that names some of them draws only those people.
+- Image prompts are cinematic 3D film stills. Dialogue, speech verbs, and the words “comic” and “lettering” stay out of the positive prompt. Speech-bubble terms stay in the negative prompt. Edit requests, which have no negative prompt, ask for a clean image with no text. Her dialogue is lettered by the app on top of the picture.
+- Likeness mode can send each character’s approved portrait to Venice `POST /image/edit` or `POST /image/multi-edit` (default `qwen-edit-uncensored`). Chroma text-only remains available. Service worker cache is `comic-studio-v1.12.0`.
 
 ### v1.11
 
