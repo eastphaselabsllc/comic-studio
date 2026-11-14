@@ -25,7 +25,9 @@ export function veniceImageBody(payload,refs,spec,seed,model){const body={...pay
 async function holdScreen(){try{return await globalThis.navigator?.wakeLock?.request?.('screen')||null;}catch{return null;}}
 const PLAN_SHAPE='Return ONLY valid JSON: {"pages":[{"layout":"single|two|hero","panels":[{"camera":"shot and camera angle","prompt":"visual action only, no quoted speech","cast":["exact character id"],"dialogue":"","caption":""}]}]}. Every dialogue and caption must be an empty string. Describe the action only. Do not mention speech bubbles, captions, signs, or written words, and do not ask for lettering in the picture. Use only the supplied character IDs. Do not add plot or new characters. No markdown.';
 export function planInstruction(data){const target=Number(data?.targetPanels);if(Number.isFinite(target)&&target>0){const n=clampPanelCount(target);const pages=Math.min(EPISODE_MAX_PAGES,Math.ceil(n/PAGE_MAX_PANELS));return `Lay out this episode as exactly ${n} visual comic panels in reading order, beat by beat, covering the whole script without skipping scenes. ${PLAN_SHAPE} Use 1–${PAGE_MAX_PANELS} panels per page across ${pages} pages.`;}return `Lay out this episode as visual comic pages. ${PLAN_SHAPE} 1–12 pages, 1–6 panels per page, maximum 36 panels total.`;}
-export const IMAGE_NEGATIVE='blurry, low quality, extra limbs, text, letters, words, typography, subtitles, captions, speech bubble, speech bubbles, word balloon, dialogue balloon, comic lettering, watermark, wrong face, different hairstyle, missing tattoos';
+const QUALITY_NEGATIVE='blurry, low quality, extra limbs, text, letters, words, typography, subtitles, captions, speech bubble, speech bubbles, word balloon, dialogue balloon, comic lettering, watermark, wrong face, different hairstyle, missing tattoos';
+export const SHEET_NEGATIVE=QUALITY_NEGATIVE;
+export const IMAGE_NEGATIVE=QUALITY_NEGATIVE+', character lineup, reference sheet, turnaround, character sheet, multiple views, model sheet, grid, collage, split panel, plain white background, blank background, standing in a row, duplicate person';
 export class Provider{
   constructor(settings,approve=async()=>false,notify=()=>{}){this.settings=settings;this.approve=approve;this.notify=notify;this.models=[];}
   get key(){return localStorage.getItem('cs_k')||'';}
@@ -47,7 +49,7 @@ export class Provider{
   }
   async image(prompt,referenceIds=[],characters=[],opts={}){assertSafe(prompt,characters);if(prompt.length>16000)throw Error('This image prompt is too long. Shorten the scene or selected character profiles.');if(opts.signal?.aborted)throw cancelled();if(this.settings.demo)return mockImage(prompt);
     const refs=[];for(const id of referenceIds){const a=await getAsset(id);if(a)refs.push(await blobURL(a.blob));}
-    const payload={prompt,width:832,height:1216,steps:28,cfg_scale:7,negative_prompt:IMAGE_NEGATIVE};
+    const payload={prompt,width:832,height:1216,steps:28,cfg_scale:7,negative_prompt:opts.negativePrompt||IMAGE_NEGATIVE};
     const local=localBase(this.settings.localURL);
     if(local){try{this.notify('Rendering on your local image server…');const body=localFacePayload(payload,refs[0]);const j=await request(local+'/image/generate',body,localStorage.getItem('cs_local_k')||'',660000,opts.signal);if(!j.images?.[0])throw Error('Local server returned no image.');return await imageBlob(j.images[0]);}catch(e){if(isCancelled(e))throw e;if(!this.settings.allowCloudFallback){const err=Error('Local image request failed. No cloud request was made. '+e.message);err.retryable=!!e.retryable;throw err;}if(!await this.approve('Local rendering failed',e.message+' Switch this image to Venice? It may use paid credits, and your prompt/reference art will leave this device.'))throw Error('Cancelled. No cloud image request was sent.');}}
     return this.cloudImage(payload,refs,opts);

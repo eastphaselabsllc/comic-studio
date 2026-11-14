@@ -1,4 +1,4 @@
-# Comic Studio v1.10
+# Comic Studio v1.11
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -40,7 +40,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Text: `POST /chat/completions`, streaming SSE. Default `most_uncensored` trait (currently `venice-uncensored-1-2`). `default_vision` is still offered, but thinking is turned off so a long reply is not silent. Selected character profiles + current script are context; provider system safety stays enabled. Text is checked before and after the API call. A dropped connection says what happened and offers Try again.
 - Images: `POST /image/generate`, default `chroma`, PNG/base64 response, `cfg_scale: 7`, 28 steps, 832×1216, **`safe_mode: false`**.
 - If Chroma returns HTTP 404 (missing model), offers one separately confirmed request using `lustify-sdxl`. It does not auto-retry a timeout, network failure, policy error, or uncertain generation.
-- Reference support is capability-based: only send `style_references` if the selected model advertises `model_spec.supportsStyleReferences`; respect its advertised count. Load models in Settings to discover this. Chroma and Lustify do not accept them. On models that do, a style reference is aesthetic guidance, not face lock. Every panel prompt starts with a fixed visual identity block (face, hair, body, outfit, tattoos) and reuses a stable seed for that cast. The scene is shortened to the model’s prompt limit before any identity text is cut.
+- Reference support is capability-based: only send `style_references` if the selected model advertises `model_spec.supportsStyleReferences`; respect its advertised count. Load models in Settings to discover this. Chroma and Lustify do not accept them, so a chroma panel does not send saved reference images. On models that do, a style reference is aesthetic guidance, not face lock. Every panel prompt leads with one cinematic stylized-3D panel, then the camera and the full scene. Character looks follow in a short line (name, hair, eyes, key tattoos, build), trimmed to about 300 characters each. Clothing written in the scene overrides the saved outfit. The scene is kept whole unless it is too long for the model after that. The same cast still reuses a stable seed. The negative prompt also rejects lineups, turnarounds, reference sheets, grids, and a blank white background. Generating a character reference sheet still asks for a turnaround and does not use that lineup ban.
 - No undocumented `face_b64` field is sent to Venice.
 - Every live text/image generation asks before making a potentially paid request; declining prevents it.
 
@@ -103,6 +103,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.11
+
+- Panel images lead with one cinematic comic panel in stylized 3D (Pixar-like faces, hyper-real skin), then the camera and the scene. Long look-sheet text is summarized to about 300 characters per character instead of pushing the scene off the end of the prompt. Clothing in the scene overrides the saved outfit, and nudity is not added unless the scene asks for it. Only characters named in the scene are sent; if the scene names nobody, the panel cast is used. The negative prompt rejects character lineups, turnarounds, reference sheets, grids, and a blank background. Service worker cache is `comic-studio-v1.11.0`.
 
 ### v1.10
 

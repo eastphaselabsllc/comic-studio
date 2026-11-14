@@ -31,7 +31,7 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
   assert.deepEqual(again, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   const dbSource=fs.readFileSync(new URL('../db.js', import.meta.url), 'utf8');
-  assert.match(sw, /comic-studio-v1\.10\.0/);
+  assert.match(sw, /comic-studio-v1\.11\.0/);
   assert.doesNotMatch(sw, /comic-studio-v1\.9\.0/);
   assert.doesNotMatch(sw, /const CACHE='comic-studio-v1\.4\.0'/);
   assert.match(dbSource, /indexedDB\.open\(DB_NAME,DB_VERSION\)/);
