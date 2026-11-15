@@ -1,4 +1,4 @@
-# Comic Studio v1.13
+# Comic Studio v1.13.1
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -103,6 +103,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.13.1
+
+- Reference sheets and portraits no longer say “clean bare skin” or “no markings”. A character without tattoos is simply not described as having any, because that wording was being moderated into a black image. The tattoo ban stays in the negative prompt as tattoo, tattoos, body ink, and body art. A Venice image flagged with `x-venice-is-content-violation` or `x-venice-is-blurred` is reported as an error instead of saved. Service worker cache is `comic-studio-v1.13.1`.
 
 ### v1.13
 
