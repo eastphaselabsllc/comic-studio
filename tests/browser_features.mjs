@@ -104,7 +104,8 @@ try{
   await evalPage(`document.querySelector('[data-nav="settings"]').click()`);
   await delay(100);
   const settingsText=await evalPage(`document.body.innerText`);
-  if(!/Comic Studio v1\.12\.0/.test(settingsText)) throw Error('footer version is wrong: '+settingsText.slice(-400));
+  if(!/Comic Studio v1\.13\.2/.test(settingsText)) throw Error('footer version is wrong: '+settingsText.slice(-400));
+  if(!/Check for updates/.test(settingsText)) throw Error('update button is missing');
   if(!/No library backup has been exported/.test(settingsText)) throw Error('backup date is missing');
   if(!/Likeness portraits/.test(settingsText)) throw Error('likeness setting is missing');
   await evalPage(`document.querySelector('#settingsForm').requestSubmit()`);
