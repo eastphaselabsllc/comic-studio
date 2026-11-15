@@ -14,6 +14,11 @@ globalThis.localStorage={
 
 function clean(extra={}){return {id:'mira',name:'Mira',age:32,description:'amber eyes and a calm face',hair:'dark curls',body:'athletic adult build',outfit:'copper jacket',tattoos:'none',...extra};}
 function inked(extra={}){return clean({tattoos:'constellation on the left forearm',...extra});}
+function assertNoSkinWords(prompt){
+  assert.doesNotMatch(prompt, /bare skin/i);
+  assert.doesNotMatch(prompt, /no markings/i);
+  assert.doesNotMatch(prompt.replace(/\bhyper-real(?:istic)? skin\b/gi,''), /\bskin\b/i);
+}
 
 test('the default style no longer asks for tattoos', ()=>{
   assert.doesNotMatch(STYLE, /tattoo/i);
@@ -38,28 +43,28 @@ test('tattoos none stays out of the positive prompt and is banned in the negativ
   const prompt=panelPrompt({style:LEGACY,camera:'Medium shot, eye level',scene:'Mira waits by the glass. She has no tattoos.',characters:[person],likeness:true});
   assert.deepEqual(person, saved);
   assert.doesNotMatch(prompt, /tattoo/i);
-  assert.match(prompt, /clean bare skin with no markings/);
-  assert.match(prompt, /clean bare skin/);
+  assertNoSkinWords(prompt);
   assert.match(prompt, /cinematic lighting/);
   assert.match(prompt, /polished animated-feature rendering/);
   assert.match(prompt, /amber eyes/);
   assert.match(prompt, /dark curls/);
   assert.doesNotMatch(prompt, /intricate tattoo detail/i);
   assert.match(prompt, /face and hair identical to their reference image/);
-  assert.doesNotMatch(identityLine(person), /tattoo/i);
-  assert.match(identityLine(person), /clean bare skin with no markings/);
-  assert.doesNotMatch(characterText(person), /tattoo/i);
+  assert.doesNotMatch(identityLine(person), /tattoo|bare skin|\bskin\b/i);
+  assert.doesNotMatch(characterText(person), /tattoo|bare skin|\bskin\b/i);
   const negative=negativePromptFor([person]);
-  assert.match(negative, /tattoo, tattoos, body ink, body art, skin markings/);
-  assert.doesNotMatch(negative, /missing tattoos/);
+  assert.match(negative, /tattoo, tattoos, body ink, body art/);
+  assert.doesNotMatch(negative, /missing tattoos|skin markings|\bskin\b/i);
   assert.match(negative, /speech bubble/);
   assert.match(negative, /character lineup/);
   const portrait=portraitPrompt({style:LEGACY,characters:[person]});
   assert.doesNotMatch(portrait, /tattoo/i);
-  assert.match(portrait, /clean bare skin with no markings/i);
+  assertNoSkinWords(portrait);
+  assert.match(portrait, /Face and hair clearly visible/);
   const sheet=panelPrompt({style:LEGACY,camera:'Character design turnaround, front side and back on a plain studio background',scene:'The same fictional adult in all three views. Consistent facial features, adult proportions, hair, and tattoo placement. Outfit or nudity follows the description. No text or labels.',characters:[person],sheet:true});
   assert.doesNotMatch(sheet, /tattoo/i);
-  assert.match(sheet, /clean bare skin with no markings/i);
+  assertNoSkinWords(sheet);
+  assert.match(sheet, /adult proportions, and hair|adult proportions, hair/i);
 });
 
 test('a real tattoo is still written into the prompt', ()=>{
@@ -68,7 +73,7 @@ test('a real tattoo is still written into the prompt', ()=>{
   assert.match(prompt, /Tattoos: constellation on the left forearm/);
   assert.match(prompt, /intricate tattoo detail/);
   assert.match(prompt, /face, hair, and tattoos identical/);
-  assert.doesNotMatch(prompt, /clean bare skin/);
+  assert.doesNotMatch(prompt, /bare skin|no markings/i);
   assert.match(identityLine(person), /Tattoos: constellation on the left forearm/);
   assert.match(characterText(person), /Tattoos: constellation on the left forearm/);
   const negative=negativePromptFor([person]);
@@ -88,14 +93,13 @@ test('a mixed panel keeps one character inked and the other bare', ()=>{
   const rowan=clean({id:'rowan',name:'Rowan',age:35,description:'green eyes, no tattoos',hair:'short black hair',body:'broad shoulders',outfit:'charcoal coat',tattoos:'no tattoos'});
   const prompt=panelPrompt({style:LEGACY,camera:'Wide establishing shot',scene:'Mira and Rowan wait by the glass.',characters:[mira,rowan]});
   assert.match(prompt, /Tattoos: constellation on the left forearm/);
-  assert.match(prompt, /clean bare skin with no markings/);
+  assert.doesNotMatch(prompt, /bare skin|no markings/i);
   assert.doesNotMatch(prompt, /Tattoos:\s*no tattoos/i);
   assert.doesNotMatch(prompt, /no tattoos/i);
   const castLine=prompt.split('Characters, fictional adults, age 18+: ')[1];
   const rowanPart=castLine.split(' | ').find(part=>part.startsWith('Rowan'));
   assert.ok(rowanPart);
-  assert.doesNotMatch(rowanPart, /tattoo/i);
-  assert.match(rowanPart, /clean bare skin with no markings/);
+  assert.doesNotMatch(rowanPart, /tattoo|bare skin|\bskin\b/i);
   assert.match(castLine, /Tattoos: constellation on the left forearm/);
   assert.match(prompt, /intricate tattoo detail/);
   const negative=negativePromptFor([mira,rowan]);
@@ -107,6 +111,7 @@ test('a mixed panel keeps one character inked and the other bare', ()=>{
 test('legacy intricate tattoo detail is removed only when nobody is inked', ()=>{
   const bare=panelJob({cast:['mira'],prompt:'Mira waits by the glass.',camera:'Medium shot, eye level'}, [clean()], LEGACY);
   assert.doesNotMatch(bare.prompt, /tattoo/i);
+  assertNoSkinWords(bare.prompt);
   assert.match(bare.prompt, /polished animated-feature rendering/);
   assert.match(bare.prompt, /cinematic lighting/);
   const marked=panelJob({cast:['mira'],prompt:'Mira waits by the glass.',camera:'Medium shot, eye level'}, [inked()], LEGACY);
@@ -115,7 +120,8 @@ test('legacy intricate tattoo detail is removed only when nobody is inked', ()=>
 });
 
 test('venice generate receives a tattoo-aware negative prompt and does not call the network for real', async ()=>{
-  assert.match(IMAGE_NEGATIVE, /tattoo, tattoos, body ink, body art, skin markings/);
+  assert.match(IMAGE_NEGATIVE, /tattoo, tattoos, body ink, body art/);
+  assert.doesNotMatch(IMAGE_NEGATIVE, /skin markings|\bskin\b/i);
   assert.match(IMAGE_NEGATIVE, /speech bubble/);
   assert.match(SHEET_NEGATIVE, /speech bubble/);
   assert.doesNotMatch(SHEET_NEGATIVE, /turnaround/);
@@ -133,9 +139,10 @@ test('venice generate receives a tattoo-aware negative prompt and does not call 
   await assert.rejects(()=>provider.image(barePrompt, [], [clean({fictional:true})], {approved:true,seed:9}), /connection dropped/);
   assert.match(seen[0].url, /\/image\/generate$/);
   assert.equal(seen[0].body.model, 'lustify-sdxl');
-  assert.match(seen[0].body.negative_prompt, /tattoo, tattoos, body ink, body art, skin markings/);
-  assert.doesNotMatch(seen[0].body.negative_prompt, /missing tattoos/);
+  assert.match(seen[0].body.negative_prompt, /tattoo, tattoos, body ink, body art/);
+  assert.doesNotMatch(seen[0].body.negative_prompt, /missing tattoos|skin/);
   assert.doesNotMatch(seen[0].body.prompt, /tattoo/i);
+  assertNoSkinWords(seen[0].body.prompt);
   seen.length=0;
   const inkPrompt=panelPrompt({style:'Ink',camera:'Medium shot',scene:'Mira waits.',characters:[inked()]});
   await assert.rejects(()=>provider.image(inkPrompt, [], [inked({fictional:true})], {approved:true,seed:9}), /connection dropped/);
@@ -148,5 +155,19 @@ test('venice generate receives a tattoo-aware negative prompt and does not call 
   await assert.rejects(()=>styled.image(likePrompt, [], [clean({fictional:true})], {approved:true,preparedImages:['data:image/jpeg;base64,'+'A'.repeat(48)]}), /connection dropped/);
   assert.match(seen[0].url, /\/image\/generate$/);
   assert.match(seen[0].body.negative_prompt, /body ink/);
+  assert.doesNotMatch(seen[0].body.negative_prompt, /skin/);
   assert.doesNotMatch(seen[0].body.prompt, /tattoo/i);
+  assertNoSkinWords(seen[0].body.prompt);
+});
+
+test('a moderated Venice image is reported instead of saved', async ()=>{
+  localStorage.setItem('cs_k','not-a-real-key');
+  const provider=new Provider({...defaults,demo:false,imageModel:'chroma'}, async()=>true);
+  const body=JSON.stringify({images:['aaaa']});
+  globalThis.fetch=async()=>new Response(body,{status:200,headers:{'content-type':'application/json','x-venice-is-content-violation':'true'}});
+  await assert.rejects(()=>provider.image('Mira waits by the glass.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true}), /black frame/);
+  globalThis.fetch=async()=>new Response(body,{status:200,headers:{'content-type':'application/json','x-venice-is-blurred':'true'}});
+  await assert.rejects(()=>provider.image('Mira waits by the glass.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true}), /blurred/);
+  globalThis.fetch=async()=>new Response(body,{status:200,headers:{'content-type':'application/json','is-blurred':'true'}});
+  await assert.rejects(()=>provider.image('Mira waits by the glass.',[],[{age:32,fictional:true,name:'Mira'}],{approved:true}), /blurred/);
 });
