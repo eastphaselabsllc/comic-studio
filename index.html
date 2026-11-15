@@ -11,6 +11,7 @@
 <header class="app-header"><a href="#" id="brand" aria-label="Comic Studio home"><span class="mark">C<span>✦</span></span><span>COMIC<br><b>STUDIO</b></span></a><span id="modeBadge" class="badge">OFFLINE DEMO</span></header>
 <main id="app" tabindex="-1"><p class="empty">Opening your studio…</p></main>
 <nav class="bottom-nav" aria-label="Main navigation"><button data-nav="library" aria-label="Library" class="active"><span>▦</span>Library</button><button data-nav="characters" aria-label="Characters"><span>♙</span>Characters</button><button data-nav="settings" aria-label="Settings"><span>⚙</span>Settings</button></nav>
+<button type="button" id="updateReady" hidden>Update ready - tap to reload</button>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <div id="batchStatus" role="status" aria-live="polite" hidden><div class="row between"><strong>Generating panels</strong><span id="batchCount">0/45</span></div><progress id="batchProgress" value="0" max="45"></progress><p id="batchNote" class="muted"></p><button type="button" id="batchCancel" class="secondary" data-action="cancel-batch">Cancel</button></div>
 <dialog id="modal"><div id="modalContent"></div></dialog>

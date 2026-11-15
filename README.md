@@ -1,4 +1,4 @@
-# Comic Studio v1.13.1
+# Comic Studio v1.13.2
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -103,6 +103,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.13.2
+
+- Installed copies on iPhone (Safari and the home-screen app) pick up a deploy without waiting for the next release. The service worker fetches each shell file with `cache: 'reload'` during install, then uses network-first (`cache: 'no-cache'`) for navigations and app files, and falls back to Cache Storage only when the network fails. Speech-bubble art stays cache-first. The page registers `sw.js` with `updateViaCache: 'none'`, checks for a new worker on load and when the app becomes visible, and reloads once when the new worker takes control. A generation, a batch, or a modal with unsaved edits waits and shows “Update ready - tap to reload” instead. Settings has Check for updates, which refreshes the worker, deletes only `comic-studio-*` caches, and reloads. IndexedDB and localStorage are left alone. Service worker cache is `comic-studio-v1.13.2`.
 
 ### v1.13.1
 
