@@ -1,4 +1,4 @@
-# Comic Studio v1.12
+# Comic Studio v1.13
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -103,6 +103,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.13
+
+- Characters whose Tattoos field is empty or a negation (“none”, “no tattoos”, “n/a”, “clean skin”, “no ink”) are no longer described with the word tattoo. Prompts say clean bare skin instead, and a saved series style that still says “intricate tattoo detail” drops that phrase unless someone in the panel actually has tattoos. Panels with no inked characters put tattoo, body ink, and skin markings in the negative prompt; panels with real tattoos still ask the model not to drop them. Service worker cache is `comic-studio-v1.13.0`.
 
 ### v1.12
 
