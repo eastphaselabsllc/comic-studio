@@ -88,3 +88,11 @@ body:has(#batchStatus:not([hidden])) #updateReady:not([hidden]){bottom:calc(250p
 .image-card-body{padding:14px}
 .image-card-body p{margin:0 0 10px}
 .bottom-nav button{padding-left:2px;padding-right:2px}
+.prompt-builder,.prompt-tips{margin:4px 0 12px}
+.prompt-builder summary,.prompt-tips summary{min-height:48px;display:flex;align-items:center}
+.builder-person{border:1px solid var(--line);border-radius:12px;padding:4px 12px 12px;margin:10px 0;background:#fff}
+.builder-person h3{margin:8px 0 0}
+.prompt-builder [data-action="apply-image-builder"]{width:100%;margin-top:8px}
+.tip{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.tip p{margin:4px 0 8px}
+.tip button{width:100%}

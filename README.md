@@ -1,4 +1,4 @@
-# Comic Studio v1.15.0
+# Comic Studio v1.16.0
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -104,6 +104,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.16.0
+
+- Images has a prompt builder and a short “Tips that work” list. Pick what each checked character is doing, whether they are nude or wearing outfit text, where they stand relative to each other, plus the setting, camera, and light. It writes one editable scene into the prompt box. No API call. The same builder can fill a panel’s scene text. Service worker cache is `comic-studio-v1.16.0`.
 
 ### v1.15.0
 

@@ -1,4 +1,4 @@
-export const VERSION='1.15.0';
+export const VERSION='1.16.0';
 export const APP_CACHE_PREFIX='comic-studio-';
 export function isAppShellCache(name){return typeof name==='string'&&name.startsWith(APP_CACHE_PREFIX);}
 export function shouldDeferUpdateReload({busy=false,batch=false,unsaved=false}={}){return !!(busy||batch||unsaved);}
@@ -124,7 +124,87 @@ export function validateStandalone(raw){
 }
 export function parseJSON(text){const t=String(text).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'');return JSON.parse(t);}
 export function clampPanelCount(n){const v=Math.round(Number(n));if(!Number.isFinite(v))return DEFAULT_PANEL_COUNT;return Math.min(EPISODE_MAX_PANELS,Math.max(1,v));}
-const CAMERAS=['Wide establishing shot','Medium shot, eye level','Close-up, three-quarter view','Over the shoulder','Low angle','Bird’s-eye view'];
+export const CAMERAS=['Wide establishing shot','Medium shot, eye level','Close-up, three-quarter view','Over the shoulder','Low angle','Bird’s-eye view'];
+export const PROMPT_CAMERAS=CAMERAS;
+export const PROMPT_TOGETHER=[
+  {id:'beside',label:'Close beside each other',line:'stand close beside each other'},
+  {id:'facing',label:'Facing each other',line:'face each other, close together'},
+  {id:'sitting',label:'Sitting together',line:'sit close together'},
+  {id:'front',label:'One just in front of the other',line:'are together, one standing just in front of the other'},
+  {id:'arms',label:'An arm around the other',line:'stand together, one with an arm around the other'}
+];
+export const PROMPT_LIGHTS=[
+  {id:'day',label:'Soft daylight',line:'Soft daylight'},
+  {id:'warm',label:'Warm indoor light',line:'Warm indoor light'},
+  {id:'moon',label:'Moonlight',line:'Moonlight'},
+  {id:'shade',label:'Soft shaded light',line:'Soft shaded light'},
+  {id:'even',label:'Even studio light',line:'Even studio light'}
+];
+export const PROMPT_TIPS=[
+  {id:'one',title:'One person',template:'{name} stands in {setting}. {camera}. {lighting}.'},
+  {id:'two',title:'Two people together',template:'{name} and {name2} stand close beside each other in {setting}. They face one another and both stay fully in the frame. {camera}. {lighting}.'},
+  {id:'close',title:'Close-up',template:'Close-up of {name} in {setting}, eye level. The face fills most of the frame. {lighting}.'},
+  {id:'wide',title:'Wide shot',template:'Wide shot of {cast} in {setting}. Everyone is fully visible from head to feet, in the same place. {lighting}.'}
+];
+function promptSentence(text){const clean=String(text||'').replace(/\s+/g,' ').trim().replace(/[.?!]+$/,'');return clean?`${clean}.`:'';}
+function promptOutfit(text){return String(text||'').replace(/\s+/g,' ').trim().replace(/[.?!]+$/,'').replace(/^(?:wearing|wears|wore)\s+/i,'');}
+function joinNames(names){if(names.length<=1)return names[0]||'';if(names.length===2)return `${names[0]} and ${names[1]}`;return `${names.slice(0,-1).join(', ')}, and ${names.at(-1)}`;}
+export function fillPromptTip(id,{names=[],setting='',camera='',lighting=''}={}){
+  const tip=PROMPT_TIPS.find(item=>item.id===id);
+  if(!tip)throw Error('Unknown prompt tip.');
+  const list=(Array.isArray(names)?names:[]).map(name=>String(name||'').trim()).filter(Boolean);
+  const text=tip.template
+    .replaceAll('{cast}',list.length?joinNames(list):'{name}')
+    .replaceAll('{name2}',list[1]||'{name2}')
+    .replaceAll('{name}',list[0]||'{name}')
+    .replaceAll('{setting}',String(setting||'').trim()||'{setting}')
+    .replaceAll('{camera}',String(camera||'').trim()||'{camera}')
+    .replaceAll('{lighting}',String(lighting||'').trim()||'{lighting}');
+  if(text.length>5000)throw Error('That prompt is too long. Shorten it and try again.');
+  assertSafe(text);
+  return text;
+}
+export function buildScenePrompt({people,setting='',camera='',lighting='',together='beside'}={}){
+  const cast=(Array.isArray(people)?people:[]).filter(person=>person&&String(person.name||'').trim());
+  if(!cast.length)throw Error('Check at least one character, or write the prompt yourself.');
+  if(cast.length>6)throw Error('Build a prompt for up to 6 characters at a time.');
+  const names=cast.map(person=>String(person.name).trim());
+  const place=String(setting||'').replace(/\s+/g,' ').trim().replace(/[.?!]+$/,'');
+  const relation=(PROMPT_TOGETHER.find(item=>item.id===together)||PROMPT_TOGETHER[0]).line;
+  const parts=[];
+  if(names.length===1){
+    const action=String(cast[0].action||'').replace(/\s+/g,' ').trim().replace(/[.?!]+$/,'')||'stands';
+    parts.push(promptSentence(place?`${names[0]} ${action} in ${place}`:`${names[0]} ${action}`));
+  }else{
+    parts.push(promptSentence(place?`${joinNames(names)} ${relation} in ${place}`:`${joinNames(names)} ${relation}`));
+    for(const person of cast){
+      const action=String(person.action||'').replace(/\s+/g,' ').trim().replace(/[.?!]+$/,'');
+      if(action)parts.push(promptSentence(`${person.name.trim()} ${action}`));
+    }
+  }
+  const anyNude=cast.some(person=>person.clothing==='nude');
+  for(const person of cast){
+    const name=person.name.trim();
+    if(person.clothing==='nude')parts.push(`${name} is nude.`);
+    else if(person.clothing==='custom'){
+      const worn=promptOutfit(person.outfit);
+      if(!worn)throw Error(`Add outfit text for ${name}, or choose Saved outfit.`);
+      parts.push(`${name} wears ${worn}.`);
+    }else if(anyNude){
+      const saved=promptOutfit(person.savedOutfit);
+      if(saved)parts.push(`${name} wears ${saved}.`);
+    }
+  }
+  const shot=promptSentence(camera);
+  const light=promptSentence(lighting);
+  if(shot)parts.push(shot);
+  if(light)parts.push(light);
+  const text=parts.filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  if(!text)throw Error('Add a setting, an action, or a camera first.');
+  if(text.length>5000)throw Error('That prompt is too long. Shorten the actions or the setting.');
+  assertSafe(text);
+  return text;
+}
 function splitSentences(block){return block.replace(/([.!?])\s+/g,'$1\n').split('\n').map(s=>s.trim()).filter(Boolean);}
 function atomsOf(text){const blocks=text.split(/\n+/).map(s=>s.trim()).filter(Boolean);const atoms=[];for(const block of blocks){const bits=splitSentences(block);atoms.push(...(bits.length?bits:[block]));}return atoms.length?atoms:[text];}
 function mergeEvenly(parts,n){const out=[];for(let i=0;i<n;i++){const a=Math.floor(i*parts.length/n);const b=Math.max(Math.floor((i+1)*parts.length/n),a+1);out.push(parts.slice(a,b).join(' ').replace(/\s+/g,' ').trim());}return out;}
