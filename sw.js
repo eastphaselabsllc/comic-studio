@@ -1,4 +1,4 @@
-const CACHE='comic-studio-v1.15.1';
+const CACHE='comic-studio-v1.16.0';
 const FILES=['./','./index.html','./styles.css','./app.js','./core.js','./db.js','./provider.js','./batch.js','./bubbles.js','./manifest.json','./icon.svg','./icon-192.png','./icon-512.png','./bubbles/round-speech.svg','./bubbles/thought-cloud.svg','./bubbles/shout-burst.svg','./bubbles/whisper-dashed.svg','./bubbles/caption-box.svg'];
 function shellURL(path){return new URL(path,self.registration.scope).href;}
 function freshRequest(request){
