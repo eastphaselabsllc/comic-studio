@@ -110,7 +110,7 @@ test('image prompts lead with the scene and shorten only an extremely long scene
   const scene=`Garden path. ${'walking further '.repeat(400)}ZEBRAEND`;
   const prompt=panelPrompt({style:'Ink',camera:'Close-up, three-quarter view',scene,characters:[mira],limit:1200});
   assert.ok(prompt.length<=1200);
-  assert.match(prompt, /^A cinematic 3D animated film still, stylized Pixar-like characters, hyper-real skin/);
+  assert.match(prompt, /^A cinematic 3D animated film still of grown adults in their 30s with mature adult faces: defined cheekbones and jawlines, adult facial structure, natural adult proportions, detailed realistic skin/);
   assert.doesNotMatch(prompt, /\bcomic\b|lettering|speech bubble|word balloon/i);
   assert.match(prompt, /Camera: Close-up, three-quarter view/);
   assert.match(prompt, /Scene: Garden path/);
@@ -214,7 +214,7 @@ test('Jade’s door scene stays whole and ahead of a long look sheet', ()=>{
   const job=panelJob({cast:['jade','mark','sam'],prompt:scene,camera:'over-the-shoulder shot'}, [jade,mark,sam], 'Stylized 3D toon faces, expressive adult proportions, hyper-realistic skin textures, cinematic lighting, intricate tattoo detail, polished animated-feature rendering.', {limit:7500});
   const prompt=job.prompt;
   assert.ok(prompt.length<=7500);
-  assert.match(prompt, /^A cinematic 3D animated film still, stylized Pixar-like characters, hyper-real skin/);
+  assert.match(prompt, /^A cinematic 3D animated film still of grown adults in their 30s with mature adult faces: defined cheekbones and jawlines, adult facial structure, natural adult proportions, detailed realistic skin/);
   assert.doesNotMatch(prompt, /\bcomic\b|lettering|speech bubble|word balloon/i);
   assert.ok(prompt.includes(scene));
   const sceneAt=prompt.indexOf(scene);

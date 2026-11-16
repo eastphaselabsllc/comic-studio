@@ -17,14 +17,44 @@ function inked(extra={}){return clean({tattoos:'constellation on the left forear
 function assertNoSkinWords(prompt){
   assert.doesNotMatch(prompt, /bare skin/i);
   assert.doesNotMatch(prompt, /no markings/i);
-  assert.doesNotMatch(prompt.replace(/\bhyper-real(?:istic)? skin\b/gi,''), /\bskin\b/i);
+  assert.doesNotMatch(prompt.replace(/\b(?:hyper-real(?:istic)? skin|detailed realistic skin|realistic skin)\b/gi,''), /\bskin\b/i);
 }
 
 test('the default style no longer asks for tattoos', ()=>{
   assert.doesNotMatch(STYLE, /tattoo/i);
+  assert.doesNotMatch(STYLE, /pixar|toon faces/i);
   assert.match(STYLE, /cinematic lighting/);
-  assert.match(STYLE, /polished animated-feature rendering/);
+  assert.match(STYLE, /clearly mature adult characters with defined cheekbones, jawlines and adult facial structure/);
+  assert.match(STYLE, /polished rendering/);
+  assert.equal(STYLE, 'Stylized 3D animated film look, clearly mature adult characters with defined cheekbones, jawlines and adult facial structure, natural adult proportions, hyper-realistic skin textures, cinematic lighting, polished rendering.');
   assert.equal(stripStyleTattoos(LEGACY), 'Stylized 3D toon faces, expressive adult proportions, hyper-realistic skin textures, cinematic lighting, polished animated-feature rendering.');
+});
+
+test('default faces are mature adults and a saved series style is left unchanged', ()=>{
+  const person=clean();
+  const prompt=panelPrompt({style:STYLE,camera:'Medium shot',scene:'Mira waits by the glass.',characters:[person]});
+  assert.match(prompt, /^A cinematic 3D animated film still of grown adults in their 30s with mature adult faces: defined cheekbones and jawlines, adult facial structure, natural adult proportions, detailed realistic skin\./);
+  assert.doesNotMatch(prompt, /pixar|toon faces/i);
+  assertNoSkinWords(prompt);
+  const portrait=portraitPrompt({style:STYLE,characters:[person]});
+  assert.match(portrait, /^Front-facing head-and-shoulders likeness portrait of one fictional adult\./);
+  assert.doesNotMatch(portrait, /pixar|toon faces/i);
+  const sheet=panelPrompt({style:STYLE,camera:'Character design turnaround, front side and back on a plain studio background',scene:'The same fictional adult in all three views.',characters:[person],sheet:true});
+  assert.match(sheet, /^Character design turnaround, front side and back on a plain studio background/);
+  assert.doesNotMatch(sheet, /pixar|toon faces/i);
+  const savedStyle='Stylized 3D toon faces, Pixar-like characters, polished animated-feature rendering.';
+  const kept=panelPrompt({style:savedStyle,camera:'Medium shot',scene:'Mira waits by the glass.',characters:[person]});
+  assert.match(kept, /toon faces/);
+  assert.match(kept, /Pixar-like characters/);
+  const sheetNeg=negativePromptFor([person],{sheet:true});
+  const inkNeg=negativePromptFor([inked()]);
+  for(const term of ['childlike face','baby face','youthful face','chubby cheeks','oversized eyes','cartoon child','speech bubble']){
+    assert.match(sheetNeg, new RegExp(term));
+    assert.match(inkNeg, new RegExp(term));
+    assert.match(negativePromptFor([]), new RegExp(term));
+  }
+  assert.doesNotMatch(sheetNeg, /character lineup/);
+  assert.match(inkNeg, /missing tattoos/);
 });
 
 test('negated tattoo fields are not tattoos', ()=>{
@@ -55,6 +85,7 @@ test('tattoos none stays out of the positive prompt and is banned in the negativ
   const negative=negativePromptFor([person]);
   assert.match(negative, /tattoo, tattoos, body ink, body art/);
   assert.doesNotMatch(negative, /missing tattoos|skin markings|\bskin\b/i);
+  for(const term of ['childlike face','baby face','youthful face','chubby cheeks','oversized eyes','cartoon child'])assert.match(negative, new RegExp(term));
   assert.match(negative, /speech bubble/);
   assert.match(negative, /character lineup/);
   const portrait=portraitPrompt({style:LEGACY,characters:[person]});

@@ -1,4 +1,4 @@
-# Comic Studio v1.13.2
+# Comic Studio v1.14.0
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -103,6 +103,11 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.14.0
+
+- A saved character, series, or episode can be deleted. Deleting a character removes them from every episode and panel cast and drops their reference or portrait only when nothing else still uses that image. Panel art stays. Deleting a series or episode removes that story and panel images that belonged only to it. Characters stay in the library. Service worker cache is `comic-studio-v1.14.0`.
+- New panels ask for grown adults in their 30s with mature faces, defined cheekbones, and jawlines. The default series style matches. A series style already saved on the device is not rewritten. The negative prompt also rejects childlike faces, baby faces, youthful faces, chubby cheeks, oversized eyes, and cartoon children.
 
 ### v1.13.2
 

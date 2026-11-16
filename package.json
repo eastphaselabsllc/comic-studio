@@ -1,5 +1,6 @@
 {
   "name": "comic-studio",
+  "version": "1.14.0",
   "private": true,
   "type": "module",
   "scripts": {
