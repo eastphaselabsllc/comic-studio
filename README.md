@@ -109,6 +109,10 @@ Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboa
 
 - Images has a prompt builder and a short “Tips that work” list. Pick what each checked character is doing, whether they are nude or wearing outfit text, where they stand relative to each other, plus the setting, camera, and light. It writes one editable scene into the prompt box. No API call. The same builder can fill a panel’s scene text. Service worker cache is `comic-studio-v1.16.0`.
 
+### v1.15.1
+
+- A scene that says a character is nude, naked, undressed, topless, without clothes, or strips no longer keeps that character’s saved outfit in the image prompt. Clothing mentioned in the saved description is left out too. Hair, eyes, build, and tattoos stay. If the scene names who is undressed, only those people lose their outfit; otherwise everyone drawn does. The text-only negative prompt also rejects bodysuit, latex suit, and other clothing. Story panels and the Images page share this prompt. Service worker cache is `comic-studio-v1.15.1`.
+
 ### v1.15.0
 
 - Images is its own page in the bottom navigation. Generate one picture from a prompt, optional saved characters, and the default art style, without creating a series or an episode. Generation uses the same panel prompt, Venice models, likeness mode, and content blocks. Pictures are stored in a separate IndexedDB store, so they never show up in a story. Export includes them. An older backup still restores and leaves standalone images on the device. IndexedDB upgrades from v2 to v3 without clearing existing stores. Service worker cache is `comic-studio-v1.15.0`.

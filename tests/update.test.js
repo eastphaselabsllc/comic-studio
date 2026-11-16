@@ -30,8 +30,8 @@ test('the footer version and the service worker cache move together', ()=>{
 });
 
 test('only comic-studio- caches are eligible for deletion', ()=>{
-  const keys=['comic-studio-v1.16.0','comic-studio-v1.15.0','comic-studio-v1.14.0','comic-studio-v1.13.2','comic-studio-v1.13.1','comic-studio-v1.10.0','comic-studio','user-photos','',null,'Comic-Studio-v1'];
-  assert.deepEqual(keys.filter(isAppShellCache), ['comic-studio-v1.16.0','comic-studio-v1.15.0','comic-studio-v1.14.0','comic-studio-v1.13.2','comic-studio-v1.13.1','comic-studio-v1.10.0']);
+  const keys=['comic-studio-v1.16.0','comic-studio-v1.15.1','comic-studio-v1.15.0','comic-studio-v1.14.0','comic-studio-v1.13.2','comic-studio-v1.13.1','comic-studio-v1.10.0','comic-studio','user-photos','',null,'Comic-Studio-v1'];
+  assert.deepEqual(keys.filter(isAppShellCache), ['comic-studio-v1.16.0','comic-studio-v1.15.1','comic-studio-v1.15.0','comic-studio-v1.14.0','comic-studio-v1.13.2','comic-studio-v1.13.1','comic-studio-v1.10.0']);
 });
 
 test('automatic reload waits for a generation, a batch, or unsaved edits and will not loop', ()=>{

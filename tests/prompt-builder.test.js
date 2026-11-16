@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {PROMPT_TIPS, PROMPT_TOGETHER, buildScenePrompt, fillPromptTip} from '../core.js';
+import {PROMPT_TIPS, PROMPT_TOGETHER, buildScenePrompt, fillPromptTip, panelPrompt, standaloneImageJob} from '../core.js';
+import {negativePromptFor} from '../provider.js';
 
 const jade={id:'jade',name:'Jade',savedOutfit:'A green jacket',action:'stands with one hand on the rail'};
 const kody={id:'kody',name:'Kody',savedOutfit:'A dark shirt and trousers',action:'looks toward the window'};
@@ -47,6 +48,34 @@ test('the builder keeps the same content blocks and the tips stay plain', ()=>{
   assert.match(filled, /Jade and Kody stand close beside each other in a garden/);
   assert.doesNotMatch(filled, /\{name|\{setting|\{camera|\{lighting/);
   assert.throws(()=>fillPromptTip('close',{names:['a child']}), /Adults only|not allowed/);
+});
+
+test('a builder nude sentence drops that character’s saved clothes in the image prompt', ()=>{
+  const scene=buildScenePrompt({
+    people:[
+      {name:'Jade',action:'stands with one hand on the rail',clothing:'nude',savedOutfit:'Green latex bodysuit'},
+      {name:'Kody',action:'stands next to her',clothing:'saved',savedOutfit:'A dark shirt and trousers'}
+    ],
+    together:'beside',
+    setting:'a quiet balcony',
+    camera:'Medium shot, eye level',
+    lighting:'Moonlight'
+  });
+  const jade={id:'jade',name:'Jade',age:32,fictional:true,description:'Green eyes, sharp cheekbones, usually in a green latex bodysuit.',hair:'Long straight black hair',body:'Tall athletic adult build',outfit:'Green latex bodysuit',tattoos:'A snake on the left thigh'};
+  const kody={id:'kody',name:'Kody',age:34,fictional:true,description:'Brown eyes and a short beard.',hair:'Short brown hair',body:'Broad adult build',outfit:'A dark shirt and trousers',tattoos:'none'};
+  const image=panelPrompt({style:'Ink',camera:'Medium shot, eye level',scene,characters:[jade,kody],limit:7500});
+  const standalone=standaloneImageJob({prompt:scene,style:'Ink',cast:['jade','kody'],characters:[jade,kody],limit:7500});
+  assert.equal(standalone.prompt, image);
+  assert.equal(standalone.suppressWardrobe, true);
+  assert.match(image, /Jade is nude/);
+  assert.doesNotMatch(image, /bodysuit|latex/i);
+  assert.match(image, /Long straight black hair/);
+  assert.match(image, /snake on the left thigh/i);
+  assert.match(image, /Kody wears A dark shirt and trousers/);
+  assert.match(image, /Short brown hair/);
+  assert.match(negativePromptFor(standalone.characters,{undressed:true}), /bodysuit/);
+  const kept=panelPrompt({style:'Ink',camera:'Medium shot, eye level',scene:buildScenePrompt({people:[{name:'Jade',action:'stands by a window',clothing:'saved',savedOutfit:'Green latex bodysuit'}],setting:'a small room'}),characters:[jade]});
+  assert.match(kept, /Green latex bodysuit|green latex bodysuit/);
 });
 
 test('Images and panel scene text share the builder', ()=>{

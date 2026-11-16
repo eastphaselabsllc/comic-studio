@@ -83,8 +83,9 @@ test('the image page is wired to the panel generator and its own store', ()=>{
   assert.match(fn, /provider\.image\(job\.prompt,job\.referenceIds,job\.characters/);
   assert.match(fn, /portraitIds:settings\.likenessMode\?job\.portraitIds:\[\]/);
   assert.match(fn, /if\(settings\.likenessMode&&!job\.characters\.length\)opts\.forceGenerate=true/);
+  assert.match(fn, /if\(job\.suppressWardrobe&&!settings\.likenessMode\)opts\.negativePrompt=negativePromptFor\(job\.characters,\{undressed:true\}\)/);
   assert.match(fn, /assertSafe\(/);
-  assert.doesNotMatch(fn, /negativePrompt|width:|height:|lib\.series|saveLibrary|buildEpisodePages/);
+  assert.doesNotMatch(fn, /width:|height:|lib\.series|saveLibrary|buildEpisodePages/);
 });
 
 function pngBlob(){
