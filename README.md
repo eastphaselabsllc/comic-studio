@@ -1,4 +1,4 @@
-# Comic Studio v1.14.0
+# Comic Studio v1.15.0
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -24,6 +24,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Series > episodes, per-series art style, editable scripts and selected cast, AI polish preview/apply/undo.
 - AI-planned pages and editable panel cards: page layout, camera angle, scene prompt, cast, dialogue, captions, lettering position, add/remove panels and pages, regenerate a single panel.
 - **Generate comic** turns the script into panels in reading order, one panel per sentence, with no invented beats. Only characters checked for the episode are drawn. Dialogue from the script is lettered by the app on top of the art. Cancel keeps finished panels; Resume retries only the ones without art.
+- **Images** generates one picture without a series or episode. It uses the same panel prompt, models, likeness mode, and content blocks. Saved images stay in their own IndexedDB store and never appear in a story. Library export includes them; an older backup still imports and leaves them in place.
 - Speech bubbles are added only by hand. Pick a preset, drag it onto the panel, and type. They stay overlays on top of the art in the reader and in a page download. Image requests also tell the model not to draw balloons or words, and quoted speech is removed from the scene text sent to the image model.
 - Page reader with previous/next, horizontal swipe, and keyboard navigation.
 - IndexedDB image blobs and library metadata, debounced autosaving, JSON backup/export and validated atomic restore. Backups contain all referenced art, not connection settings or keys.
@@ -61,7 +62,7 @@ The app starts in **Offline demo mode**. “Try a sample story” creates two fi
 - Client checks enforce adult ages, fictional-character attestation, minor/school-age/age-ambiguous terms, non-consent, and animal-sex terms. Explicit adult content and nudity between consenting fictional adults is allowed. Inputs, generated text, plans, and imported metadata are checked. **These are heuristic client-side guardrails, not tamper-proof moderation or visual age verification.** Uploaded/generated raster art is not automatically content-classified. A production backend needs independent moderation and policy enforcement.
 - Local reference conditioning supports **one face only**. Multi-character consistency and exact tattoo placement are not solved. Turnaround sheets may be weaker FaceID inputs than a clean front portrait.
 - Service worker caches only the app shell, never API requests, credentials, backups, or image blobs. Browser website-data eviction still removes the library; export regularly. Persistent-storage requests may be denied, including on mobile Safari.
-- v1 caps: 100 characters, 100 series, 200 episodes/series, 12 pages/episode, 6 panels/page, 72 panels/episode. The quick **Plan pages** action still asks for at most 36 panels. **Generate comic** uses the Settings panel count, default 45. Upload up to 20 MB; raster refs resized to 1536px; backup import limited to 100 MB. Very large libraries need chunked/ZIP backup in a future version.
+- v1 caps: 100 characters, 100 series, 200 episodes/series, 12 pages/episode, 6 panels/page, 72 panels/episode, 200 standalone images. The quick **Plan pages** action still asks for at most 36 panels. **Generate comic** uses the Settings panel count, default 45. Upload up to 20 MB; raster refs resized to 1536px; backup import limited to 100 MB. Very large libraries need chunked/ZIP backup in a future version.
 - No sync/multiplayer, panel reorder/drag-resize, PDF/CBZ export, advanced lettering placement, or guaranteed character continuity. No actual iPhone/Safari hardware validation yet.
 - User style-reference attachment path in the brief was not present on this executor’s box; no personal style images were embedded. The default style uses the written description.
 
@@ -103,6 +104,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.15.0
+
+- Images is its own page in the bottom navigation. Generate one picture from a prompt, optional saved characters, and the default art style, without creating a series or an episode. Generation uses the same panel prompt, Venice models, likeness mode, and content blocks. Pictures are stored in a separate IndexedDB store, so they never show up in a story. Export includes them. An older backup still restores and leaves standalone images on the device. IndexedDB upgrades from v2 to v3 without clearing existing stores. Service worker cache is `comic-studio-v1.15.0`.
 
 ### v1.14.0
 
