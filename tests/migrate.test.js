@@ -13,7 +13,7 @@ function library(pages, schemaVersion=1){
 }
 
 test('indexedDB upgrade keeps existing stores and stories', ()=>{
-  assert.equal(DB_VERSION, 2);
+  assert.equal(DB_VERSION, 3);
   assert.doesNotMatch(upgradeDatabase.toString(), /clear|deleteObjectStore/);
   const fresh=[];
   upgradeDatabase({
@@ -21,17 +21,38 @@ test('indexedDB upgrade keeps existing stores and stories', ()=>{
     createObjectStore(name, opts){fresh.push({name, opts});},
     deleteObjectStore(){throw Error('upgrade deleted a store');}
   });
-  assert.deepEqual(fresh.map(x=>x.name), ['library','assets']);
-  const again=[];
+  assert.deepEqual(fresh.map(x=>x.name), ['library','assets','standalone']);
+  assert.deepEqual(fresh.find(x=>x.name==='assets').opts, {keyPath:'id'});
+  assert.deepEqual(fresh.find(x=>x.name==='standalone').opts, {keyPath:'id'});
+  const kept=new Map([
+    ['library', new Map([['root', {schemaVersion:2, characters:[{id:'c1'}], series:[{id:'s1', title:'Keep Me'}]}]])],
+    ['assets', new Map([['img1', {id:'img1', blob:'panel-art'}]])]
+  ]);
+  const created=[];
   upgradeDatabase({
-    objectStoreNames:{contains(name){return name==='library'||name==='assets';}},
+    objectStoreNames:{contains(name){return kept.has(name);}},
+    createObjectStore(name, opts){
+      if(kept.has(name))throw Error('upgrade recreated an existing store');
+      kept.set(name, new Map());
+      created.push({name, opts});
+    },
+    deleteObjectStore(){throw Error('upgrade deleted a store');}
+  });
+  assert.deepEqual(created, [{name:'standalone', opts:{keyPath:'id'}}]);
+  assert.equal(kept.get('library').get('root').series[0].title, 'Keep Me');
+  assert.equal(kept.get('library').get('root').characters[0].id, 'c1');
+  assert.equal(kept.get('assets').get('img1').blob, 'panel-art');
+  assert.equal(kept.get('standalone').size, 0);
+  const idle=[];
+  upgradeDatabase({
+    objectStoreNames:{contains(name){return name==='library'||name==='assets'||name==='standalone';}},
     createObjectStore(){throw Error('upgrade recreated an existing store');},
     deleteObjectStore(){throw Error('upgrade deleted a store');}
   });
-  assert.deepEqual(again, []);
+  assert.deepEqual(idle, []);
   const sw=fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   const dbSource=fs.readFileSync(new URL('../db.js', import.meta.url), 'utf8');
-  assert.match(sw, /const CACHE='comic-studio-v1\.14\.0'/);
+  assert.match(sw, /const CACHE='comic-studio-v1\.15\.0'/);
   assert.doesNotMatch(sw, /caches\.addAll/);
   assert.doesNotMatch(sw, /comic-studio-v1\.9\.0/);
   assert.doesNotMatch(sw, /const CACHE='comic-studio-v1\.4\.0'/);

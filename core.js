@@ -1,4 +1,4 @@
-export const VERSION='1.14.0';
+export const VERSION='1.15.0';
 export const APP_CACHE_PREFIX='comic-studio-';
 export function isAppShellCache(name){return typeof name==='string'&&name.startsWith(APP_CACHE_PREFIX);}
 export function shouldDeferUpdateReload({busy=false,batch=false,unsaved=false}={}){return !!(busy||batch||unsaved);}
@@ -13,6 +13,7 @@ export const EPISODE_MAX_PANELS=72;
 export const PAGE_MAX_PANELS=6;
 export const EPISODE_MAX_PAGES=12;
 export const PLAN_MAX_PANELS=36;
+export const STANDALONE_LIMIT=200;
 export function clean(s){return String(s||'').normalize('NFKC').replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u206f]/g,'').toLowerCase();}
 export function assertSafe(text,characters=[]){
   const t=clean(text);
@@ -93,6 +94,33 @@ export function assetIds(lib){
   const refs=lib.characters.flatMap(c=>[c.refId,c.portraitId]);
   const images=lib.series.flatMap(s=>s.episodes.flatMap(e=>e.pages.flatMap(p=>p.panels.map(x=>x.imageId))));
   return [...new Set([...refs,...images].filter(Boolean))];
+}
+export function validateStandalone(raw){
+  if(!Array.isArray(raw))throw Error('Unsupported backup file.');
+  if(raw.length>STANDALONE_LIMIT)throw Error('This backup has too many standalone images.');
+  const seen=new Set(),images=new Set();
+  return raw.map(item=>{
+    if(!item||typeof item!=='object')throw Error('Invalid standalone image.');
+    const recordId=id(item.id);
+    if(seen.has(recordId))throw Error('Duplicate identifier in backup.');
+    seen.add(recordId);
+    const imageId=id(item.imageId);
+    if(images.has(imageId))throw Error('Unexpected or duplicated backup image.');
+    images.add(imageId);
+    if(typeof item.prompt!=='string')throw Error('Invalid standalone image.');
+    const prompt=str(squash(item.prompt),5000);
+    if(!prompt)throw Error('Describe the image first.');
+    if(item.style!=null&&typeof item.style!=='string')throw Error('Invalid standalone image.');
+    if(item.camera!=null&&typeof item.camera!=='string')throw Error('Invalid standalone image.');
+    const style=str(item.style==null?'':squash(item.style),5000);
+    const camera=str(item.camera==null?'Medium shot, eye level':squash(item.camera)||'Medium shot, eye level',200);
+    if(!Array.isArray(item.cast)||item.cast.length>100)throw Error('Invalid standalone image.');
+    const cast=[];
+    for(const value of item.cast){const next=id(value);if(!cast.includes(next))cast.push(next);}
+    const createdAt=Number(item.createdAt);
+    assertSafe([prompt,style,camera].join('\n'));
+    return {id:recordId,prompt,style,camera,cast,imageId,createdAt:Number.isFinite(createdAt)?createdAt:0};
+  });
 }
 export function parseJSON(text){const t=String(text).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'');return JSON.parse(t);}
 export function clampPanelCount(n){const v=Math.round(Number(n));if(!Number.isFinite(v))return DEFAULT_PANEL_COUNT;return Math.min(EPISODE_MAX_PANELS,Math.max(1,v));}
@@ -249,6 +277,13 @@ export function panelJob(panel,characters,style,opts={}){
   const ordered=castForPanel(panel,pool);
   const key=ordered.map(c=>c.id).join('|')||'panel';
   return {prompt:panelPrompt({style:style||'',camera:panel?.camera||'',scene:panel?.prompt||'',characters:ordered,limit:opts.limit||7500,sheet:opts.sheet===true,likeness:opts.likeness===true}),referenceIds:ordered.map(c=>c.refId).filter(Boolean),portraitIds:ordered.map(c=>c.portraitId).filter(Boolean),seed:characterSeed(key),characters:ordered};
+}
+export function standaloneImageJob({prompt,style,cast,characters,camera,limit=7500,likeness=false}={}){
+  const ids=[];
+  for(const characterId of Array.isArray(cast)?cast:[]){if(characterId&&!ids.includes(characterId))ids.push(characterId);}
+  const byId=new Map((characters||[]).filter(c=>c&&c.id).map(c=>[c.id,c]));
+  const picked=ids.map(characterId=>byId.get(characterId)).filter(Boolean);
+  return panelJob({prompt:prompt||'',camera:camera||'Medium shot, eye level',cast:picked.map(c=>c.id)},picked,style||'',{limit,likeness:likeness===true});
 }
 function uniqueIds(ids){const out=[];for(const id of ids||[]){if(!id||out.includes(id))continue;out.push(id);}return out;}
 function referencedAssetIds(lib){
