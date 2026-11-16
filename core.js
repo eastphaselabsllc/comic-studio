@@ -1,4 +1,4 @@
-export const VERSION='1.15.0';
+export const VERSION='1.15.1';
 export const APP_CACHE_PREFIX='comic-studio-';
 export function isAppShellCache(name){return typeof name==='string'&&name.startsWith(APP_CACHE_PREFIX);}
 export function shouldDeferUpdateReload({busy=false,batch=false,unsaved=false}={}){return !!(busy||batch||unsaved);}
@@ -209,7 +209,56 @@ function stripNudity(text,allow){if(allow)return String(text||'');return String(
 function prepLook(text,allowNudity){let s=stripNudity(stripSheet(text),allowNudity);s=s.replace(/\b(?:on|in|at|of|with)\s+(?:a|an|the)?\s*(?=[.,;]|$)/gi,' ');s=s.replace(/(?:\s*[.,;]){2,}/g,'. ');s=s.replace(/\s+([.,;])/g,'$1');return squash(s);}
 function fitText(full,fits){if(fits(full))return full;let lo=0,hi=String(full||'').length,best='';while(lo<=hi){const mid=Math.floor((lo+hi)/2);const piece=trimWords(full,mid);if(fits(piece)){best=piece;lo=mid+1;}else hi=mid-1;}return best;}
 function dressOf(scene){const s=String(scene||'');return {nudity:NUDITY_SCENE.test(s),clothing:CLOTHING_SCENE.test(s)};}
-function dressNote(dress){if(dress.nudity)return 'Dress follows the scene. Do not add extra people.';if(dress.clothing)return 'Clothing follows the scene. Do not depict nudity or add extra people.';return 'Use each saved outfit. Do not depict nudity or add extra people.';}
+function dressNote(dress){if(dress.nudity)return '';if(dress.clothing)return 'Clothing follows the scene. Do not depict nudity or add extra people.';return 'Use each saved outfit. Do not depict nudity or add extra people.';}
+const WARDROBE_CUE=/\b(?:wear(?:s|ing)?|wore|dressed|outfits?|bodysuits?|catsuits?|jumpsuits?|leotards?|unitards?|latex\s+suits?|clothing|clothes|dresses|dress|t-?shirts?|shirts?|pants|trousers|jeans|jackets?|coats?|hoodies?|sweaters?|blouses?|lingerie|underwear|bikinis?|boots?|heels?|skirts?|gowns?|robes?|uniforms?|costumes?|suits?)\b/i;
+const UNDRESSED_CUE=/\b(?:fully|completely|totally)\s+(?:nude|naked)\b|\b(?:nude|naked|nudity|topless|bottomless|unclothed|undressed)\b|\b(?:wearing nothing|wore nothing|no clothes|no clothing|without (?:any )?clothes|in the nude)\b|\bstripp(?:ed|ing)\b|\bstrips?\b(?!\s+(?:of|club|light|lighting|mall)\b)/i;
+function stripWardrobeText(text){
+  const parts=String(text||'').split(/\s*(?:,|;|\band\b)\s*/i).map(part=>{
+    let s=String(part||'');
+    s=s.replace(/\b(?:usually|always|often|typically)\s+(?:seen\s+)?(?:in|wearing)\s+(?:a|an|her|his|their)?\s*(?:[a-z]+\s+){0,4}(?=(?:bodysuits?|catsuits?|jumpsuits?|leotards?|unitards?|outfits?|dresses|dress|t-?shirts?|shirts?|pants|trousers|jeans|jackets?|coats?|hoodies?|sweaters?|blouses?|lingerie|underwear|bikinis?|boots?|heels?|skirts?|gowns?|robes?|uniforms?|costumes?|suits?|latex\s+suits?|clothing|clothes)\b)/gi,' ');
+    s=s.replace(/\b(?:[a-z]+\s+){0,3}(?:bodysuits?|catsuits?|jumpsuits?|leotards?|unitards?|latex\s+suits?|outfits?|clothing|clothes|dresses|dress|t-?shirts?|shirts?|pants|trousers|jeans|jackets?|coats?|hoodies?|sweaters?|blouses?|lingerie|underwear|bikinis?|boots?|heels?|skirts?|gowns?|robes?|uniforms?|costumes?|suits?)\b/gi,' ');
+    s=s.replace(/\b(?:usually|always|often|typically)\s+(?:seen\s+)?(?:in|wearing)\s+(?:a|an|her|his|their)?\s*$/gi,' ');
+    s=s.replace(/\b(?:wearing|wears|wore|dressed in|in)\s+(?:a|an|her|his|their)?\s*$/gi,' ');
+    return squash(s).replace(/^(?:and|with|in|a|an)\s+/i,'').replace(/\s+(?:and|with|in|a|an)$/i,'');
+  }).map(squash).filter(part=>part&&part.length>1&&!WARDROBE_CUE.test(part));
+  return parts.join(', ');
+}
+function withoutWardrobe(person){
+  const next={...person,outfit:'',description:stripWardrobeText(person.description),body:stripWardrobeText(person.body),hair:stripWardrobeText(person.hair)};
+  const look=lookObject(person);
+  if(Object.keys(look).length){
+    const cleaned={...look};
+    for(const [key,value] of Object.entries(cleaned)){
+      if(key==='tattoos'||key==='tattoo'||key==='markings'||typeof value!=='string')continue;
+      cleaned[key]=stripWardrobeText(value);
+    }
+    cleaned.outfit='';
+    cleaned.clothes='';
+    next.look=cleaned;
+  }
+  return next;
+}
+function personKey(c){return c&&(c.id||String(c.name||'').trim())||'';}
+function mentionedIn(text,character,people){
+  const name=String(character?.name||'').trim();
+  if(name.length<2)return false;
+  const word=n=>new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRegExp(n)}(?=$|[^\\p{L}\\p{N}])`,'iu');
+  if(word(name).test(text))return true;
+  const first=name.split(/\s+/)[0];
+  if(first.length<3||first.toLowerCase()===name.toLowerCase())return false;
+  const shared=(people||[]).filter(p=>String(p?.name||'').trim().split(/\s+/)[0].toLowerCase()===first.toLowerCase()).length;
+  return shared===1&&word(first).test(text);
+}
+function undressedIds(scene,characters){
+  const people=(characters||[]).filter(c=>c&&String(c.name||'').trim().length>=2);
+  if(!people.length||!UNDRESSED_CUE.test(String(scene||'')))return new Set();
+  const sentences=String(scene||'').split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean);
+  const hits=sentences.filter(s=>UNDRESSED_CUE.test(s));
+  const named=new Set();
+  for(const sentence of (hits.length?hits:[String(scene||'')]))for(const c of people)if(mentionedIn(sentence,c,people))named.add(personKey(c));
+  if(!named.size)for(const c of people)named.add(personKey(c));
+  return named;
+}
 function hairFromLook(look){const bits=[look.hairLength,look.hairTexture,look.hairColor,look.hairStyle].map(v=>typeof v==='string'?squash(v):'').filter(Boolean);if(!bits.length)return squash(look.hair||look.hairstyle||'');const phrase=bits.join(' ');return /\bhair\b/i.test(phrase)?phrase:`${phrase} hair`;}
 function eyesFromLook(look){const color=squash(look.eyeColor||look.eyes||look.eye||'');if(!color)return '';return /\beyes?\b/i.test(color)?color:`${color} eyes`;}
 function tattoosFromLook(look){const list=Array.isArray(look.tattoos)?look.tattoos:[];const bits=[];for(const mark of list){if(bits.length>=3)break;let text='';if(typeof mark==='string')text=squash(mark);else if(mark&&typeof mark==='object'){const design=squash(mark.design||mark.name||'');const placement=squash(mark.placement||'').replace(/^(?:on |the )/i,'');if(!design||isTattooNegative(design))continue;text=placement?`${design} on the ${placement}`:design;}if(text&&!isTattooNegative(text))bits.push(stripNegatedTattoos(text));}if(bits.length)return bits.join(', ');const fallback=squash(look.tattoo||look.markings||'');return fallback&&!isTattooNegative(fallback)?stripNegatedTattoos(fallback):'';}
@@ -220,7 +269,7 @@ function facet(flat,structured,blob,regex,max,allowNudity){const direct=prepLook
 function nudityOnly(text){const raw=squash(text);if(!raw||!NUDITY_SCENE.test(raw))return false;return prepLook(raw,false).replace(/\breference\b/gi,'').trim().length<12;}
 function outfitPhrase(c,allowNudity){const look=lookObject(c);const raw=squash(c.outfit)||squash(look.outfit)||squash(look.clothes)||'';if(!raw||(!allowNudity&&nudityOnly(raw)))return '';if(allowNudity&&NUDITY_SCENE.test(raw)&&prepLook(raw,false).replace(/\breference\b/gi,'').trim().length<12)return 'nude';const cleaned=trimWords(prepLook(raw,allowNudity).replace(/\breference\b/gi,''),70);return cleaned.length>=3?cleaned:'';}
 function faceExtra(c,existing,room,allowNudity){if(room<24)return '';const look=lookObject(c);const raw=prepLook([c.description,look.faceShape,look.frecklesMoles,look.facialHairStyle].filter(v=>typeof v==='string'&&v.trim()).join(', '),allowNudity);if(!raw)return '';const known=existing.toLowerCase();const keep=part=>part&&part.length>2&&!known.includes(part.toLowerCase())&&!/\beyes?\b/i.test(part);if(raw.length>160){const hit=raw.match(/\b((?:silver |gold |eyebrow |nose |lip |septum |short |trimmed |neat ){0,3}(?:piercings?|freckles|moles|beard|mustache|bangs))\b/i);const bit=hit?squash(hit[1]||hit[0]):'';return keep(bit)?trimWords(bit,Math.min(60,room)):'';}const parts=raw.split(/\s*,\s*|\s+\band\s+/i).map(squash).filter(keep);return parts.length?trimWords(parts.join(', '),Math.min(80,room)):'';}
-function compactLook(c,{includeOutfit=true,allowNudity=false,budget=LOOK_BUDGET}={}){const person=promptPerson(c)||{};const look=lookObject(person);const inked=hasTattoos(c);const blob=[person.description,person.hair,person.body,inked?person.tattoos:'',look.always,look.face,look.appearance].filter(v=>typeof v==='string').join('\n');const hair=facet(person.hair,hairFromLook(look),blob,HAIR_RE,72,allowNudity);const eyes=facet(eyesFromLook(look),'',blob,EYE_RE,40,allowNudity);const tattoos=inked?facet(person.tattoos,tattoosFromLook(look),blob,null,110,allowNudity):'';const build=facet(person.body,buildFromLook(look),blob,null,56,allowNudity);const name=squash(person.name)||'Character';const age=Number(person.age);const who=Number.isInteger(age)&&age>=18?`${name}, adult ${age}`:name;const tattooBit=inked&&tattoos?`Tattoos: ${tattoos}`:'';let line=[who,hair?`Hair: ${hair}`:'',eyes?`Eyes: ${eyes}`:'',tattooBit,build?`Build: ${build}`:''].filter(Boolean).join('. ');if(!/[.!?]$/.test(line))line+='.';if(includeOutfit){const outfit=outfitPhrase(person,allowNudity);if(outfit&&line.length+outfit.length+10<=budget)line+=` Outfit: ${outfit}.`;}const extra=faceExtra(person,line,budget-line.length-2,allowNudity);if(extra)line+=` ${extra}.`;return trimWords(squash(line),budget);}
+function compactLook(c,{includeOutfit=true,allowNudity=false,omitWardrobe=false,budget=LOOK_BUDGET}={}){const person=promptPerson(omitWardrobe?withoutWardrobe(c):c)||{};const look=lookObject(person);const inked=hasTattoos(c);const blob=[person.description,person.hair,person.body,inked?person.tattoos:'',look.always,look.face,look.appearance].filter(v=>typeof v==='string').join('\n');const hair=facet(person.hair,hairFromLook(look),blob,HAIR_RE,72,allowNudity);const eyes=facet(eyesFromLook(look),'',blob,EYE_RE,40,allowNudity);const tattoos=inked?facet(person.tattoos,tattoosFromLook(look),blob,null,110,allowNudity):'';const build=facet(person.body,buildFromLook(look),blob,null,56,allowNudity);const name=squash(person.name)||'Character';const age=Number(person.age);const who=Number.isInteger(age)&&age>=18?`${name}, adult ${age}`:name;const tattooBit=inked&&tattoos?`Tattoos: ${tattoos}`:'';let line=[who,hair?`Hair: ${hair}`:'',eyes?`Eyes: ${eyes}`:'',tattooBit,build?`Build: ${build}`:''].filter(Boolean).join('. ');if(!/[.!?]$/.test(line))line+='.';if(includeOutfit){const outfit=outfitPhrase(person,allowNudity);if(outfit&&line.length+outfit.length+10<=budget)line+=` Outfit: ${outfit}.`;}const extra=faceExtra(person,line,budget-line.length-2,allowNudity);if(extra)line+=` ${extra}.`;return trimWords(squash(line),budget);}
 function promptParts(parts){return parts.filter(Boolean).join('\n');}
 function sheetPrompt({style,camera,scene,characters,limit}){const cap=Math.max(400,Number(limit)||7500);const lead=squash(camera)||'Character design turnaround, front side and back on a plain studio background.';const inked=(characters||[]).some(c=>c&&hasTattoos(c));let beat=stripNegatedTattoos(visualScene(scene));if(!inked)beat=stripStyleTattoos(beat);let styleText=artStyle(style,characters);const looks=(characters||[]).filter(Boolean).map(c=>compactLook(c,{includeOutfit:true,allowNudity:true,budget:900})).filter(Boolean);const fullCast=looks.join('\n');let castText=fullCast;const build=(beatText,art,cast)=>promptParts([lead,beatText?`Scene: ${beatText}`:'',art?`Art style: ${art}`:'',cast]);if(build(beat,styleText,castText).length>cap)castText=fitText(castText,piece=>build(beat,styleText,piece).length<=cap);if(build(beat,styleText,castText).length>cap)styleText=fitText(styleText,piece=>build(beat,piece,castText).length<=cap);if(build(beat,styleText,castText).length>cap){castText='';styleText='';const safeBeat=inked?stripNegatedTattoos(visualScene(scene)):stripStyleTattoos(stripNegatedTattoos(visualScene(scene)));beat=fitText(safeBeat,piece=>build(piece,'','').length<=cap);castText=fitText(fullCast,piece=>build(beat,'',piece).length<=cap);}return scrubImagePrompt(build(beat,styleText,castText));}
 function nameHits(scene,pool){const source=String(scene||'');const firsts=new Map();for(const c of pool){const first=String(c.name||'').trim().split(/\s+/)[0].toLowerCase();if(first)firsts.set(first,(firsts.get(first)||0)+1);}const word=n=>new RegExp(`(?:^|[^\\p{L}\\p{N}])${escapeRegExp(n)}(?=$|[^\\p{L}\\p{N}])`,'iu');const hits=[];for(const c of pool){const name=String(c.name||'').trim();if(name.length<2)continue;let index=-1;const full=word(name).exec(source);if(full)index=full.index;else{const first=name.split(/\s+/)[0];if(first.length>=3&&first.toLowerCase()!==name.toLowerCase()&&firsts.get(first.toLowerCase())===1){const hit=word(first).exec(source);if(hit)index=hit.index;}}if(index>=0)hits.push(c.id);}return hits;}
@@ -232,9 +281,11 @@ export function panelPrompt({style,camera,scene,characters,limit=7500,sheet=fals
   let cameraText=squash(camera)||'Medium shot, eye level';
   if(cameraText.length>180)cameraText=trimWords(cameraText,180);
   const dress=dressOf(sceneFull);
-  const note=dressNote(dress);
-  const includeOutfit=!dress.clothing&&!dress.nudity;
-  const looks=(characters||[]).filter(Boolean).map(c=>compactLook(c,{includeOutfit,allowNudity:dress.nudity})).filter(Boolean);
+  const drawn=(characters||[]).filter(Boolean);
+  const bareIds=undressedIds(sceneFull,drawn);
+  const anyUndressed=drawn.some(c=>bareIds.has(personKey(c)));
+  const note=anyUndressed?'':dressNote(dress);
+  const looks=drawn.map(c=>{const bare=bareIds.has(personKey(c));return compactLook(c,{includeOutfit:!bare&&!dress.clothing,allowNudity:dress.nudity||bare,omitWardrobe:bare});}).filter(Boolean);
   const fullCast=looks.length?`Characters, fictional adults, age 18+: ${looks.join(' | ')}`:'All depicted people are fictional adults, age 18+.';
   const styleFull=artStyle(style,characters);
   let styleText=styleFull;
@@ -276,7 +327,8 @@ export function panelJob(panel,characters,style,opts={}){
   const pool=(characters||[]).filter(c=>c&&(!allowed.size||allowed.has(c.id)));
   const ordered=castForPanel(panel,pool);
   const key=ordered.map(c=>c.id).join('|')||'panel';
-  return {prompt:panelPrompt({style:style||'',camera:panel?.camera||'',scene:panel?.prompt||'',characters:ordered,limit:opts.limit||7500,sheet:opts.sheet===true,likeness:opts.likeness===true}),referenceIds:ordered.map(c=>c.refId).filter(Boolean),portraitIds:ordered.map(c=>c.portraitId).filter(Boolean),seed:characterSeed(key),characters:ordered};
+  const bare=opts.sheet?new Set():undressedIds(panel?.prompt||'',ordered);
+  return {prompt:panelPrompt({style:style||'',camera:panel?.camera||'',scene:panel?.prompt||'',characters:ordered,limit:opts.limit||7500,sheet:opts.sheet===true,likeness:opts.likeness===true}),referenceIds:ordered.map(c=>c.refId).filter(Boolean),portraitIds:ordered.map(c=>c.portraitId).filter(Boolean),seed:characterSeed(key),characters:ordered,suppressWardrobe:ordered.some(c=>bare.has(personKey(c)))};
 }
 export function standaloneImageJob({prompt,style,cast,characters,camera,limit=7500,likeness=false}={}){
   const ids=[];

@@ -1,4 +1,4 @@
-# Comic Studio v1.15.0
+# Comic Studio v1.15.1
 
 A standalone, mobile-first comic creator. Built in `/workspace/comic-studio`; no changes to Twin, Creator Lab, faceapi, PCs, GitHub, or deployment services.
 
@@ -104,6 +104,10 @@ Browser smoke test intercepts all external requests. It covers the 390×844 mobi
 Artifacts: `tests/browser-report.json`, `tests/home-mobile.png`, `tests/storyboard-mobile.png`, generated `tests/roundtrip-backup.json` (fictional sample only).
 
 ## Changelog
+
+### v1.15.1
+
+- A scene that says a character is nude, naked, undressed, topless, without clothes, or strips no longer keeps that character’s saved outfit in the image prompt. Clothing mentioned in the saved description is left out too. Hair, eyes, build, and tattoos stay. If the scene names who is undressed, only those people lose their outfit; otherwise everyone drawn does. The text-only negative prompt also rejects bodysuit, latex suit, and other clothing. Story panels and the Images page share this prompt. Service worker cache is `comic-studio-v1.15.1`.
 
 ### v1.15.0
 
