@@ -65,7 +65,8 @@ export function planInstruction(data){const target=Number(data?.targetPanels);if
 const QUALITY_NEGATIVE='blurry, low quality, extra limbs, text, letters, words, typography, subtitles, caption, captions, speech bubble, speech bubbles, word balloon, dialogue balloon, comic lettering, watermark, signature, logo, wrong face, different hairstyle, childlike face, baby face, youthful face, chubby cheeks, oversized eyes, cartoon child';
 const PANEL_NEGATIVE_TAIL=', character lineup, reference sheet, turnaround, character sheet, multiple views, model sheet, grid, collage, split panel, plain white background, blank background, standing in a row, duplicate person';
 const TATTOO_BAN='tattoo, tattoos, body ink, body art';
-export function negativePromptFor(characters,{sheet=false}={}){const ink=(characters||[]).some(c=>c&&hasTattoos(c));const tattoo=ink?'missing tattoos':TATTOO_BAN;return `${QUALITY_NEGATIVE}, ${tattoo}${sheet?'':PANEL_NEGATIVE_TAIL}`;}
+const WARDROBE_BAN='clothing, clothes, dressed, outfit, bodysuit, latex suit, catsuit, jumpsuit, leotard, uniform, costume, dress, shirt, pants, jacket, coat';
+export function negativePromptFor(characters,{sheet=false,undressed=false}={}){const ink=(characters||[]).some(c=>c&&hasTattoos(c));const tattoo=ink?'missing tattoos':TATTOO_BAN;const wardrobe=undressed&&!sheet?`, ${WARDROBE_BAN}`:'';return `${QUALITY_NEGATIVE}, ${tattoo}${wardrobe}${sheet?'':PANEL_NEGATIVE_TAIL}`;}
 export const SHEET_NEGATIVE=negativePromptFor([],{sheet:true});
 export const IMAGE_NEGATIVE=negativePromptFor([]);
 export class Provider{
