@@ -25,6 +25,7 @@ test('provider defaults and demo planning do not call the network', async ()=>{
   assert.match(IMAGE_NEGATIVE, /letters/);
   assert.doesNotMatch(IMAGE_NEGATIVE, /unreadable text/);
   for(const term of ['character lineup','reference sheet','turnaround','character sheet','multiple views','model sheet','grid','collage','split panel','plain white background','blank background','standing in a row','duplicate person'])assert.match(IMAGE_NEGATIVE, new RegExp(term));
+  for(const term of ['childlike face','baby face','youthful face','chubby cheeks','oversized eyes','cartoon child']){assert.match(IMAGE_NEGATIVE, new RegExp(term));assert.match(SHEET_NEGATIVE, new RegExp(term));}
   assert.match(SHEET_NEGATIVE, /speech bubble/);
   assert.doesNotMatch(SHEET_NEGATIVE, /turnaround/);
   assert.doesNotMatch(SHEET_NEGATIVE, /character lineup/);
@@ -155,7 +156,8 @@ test('network failures explain themselves and streaming does not wait in silence
   assert.equal(seen[0].safe_mode, false);
   assert.equal(seen[0].model, 'chroma');
   assert.equal(seen[0].style_references, undefined);
-  assert.match(seen[0].prompt, /A cinematic 3D animated film still, stylized Pixar-like characters/);
+  assert.match(seen[0].prompt, /A cinematic 3D animated film still of grown adults in their 30s with mature adult faces: defined cheekbones and jawlines/);
+  assert.doesNotMatch(seen[0].prompt, /pixar|toon faces/i);
   assert.doesNotMatch(seen[0].prompt, /\bcomic\b|lettering|speech bubble|word balloon/i);
   assert.match(seen[0].prompt, /dark curls/);
   assert.match(seen[0].negative_prompt, /character lineup/);
